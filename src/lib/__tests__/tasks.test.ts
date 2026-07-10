@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { Listing } from "@/db/schema";
 import { makeItem } from "@/publishers/__tests__/fixtures";
 import { publishers } from "@/publishers";
 import { computeDropTarget, computeTasks, daysBetween, parseDbDate } from "../tasks";
@@ -12,6 +13,21 @@ function inputs(overrides: Partial<Parameters<typeof computeTasks>[0]> = {}) {
     lastPriceChange: new Map<number, string>(),
     publishers,
     now: NOW,
+    ...overrides,
+  };
+}
+
+function makeListing(overrides: Partial<Listing> = {}): Listing {
+  return {
+    id: 1,
+    itemId: 1,
+    publisher: "offerup",
+    url: null,
+    listedPrice: 6800,
+    status: "active",
+    listedAt: "2026-07-01 12:00:00",
+    renewedAt: null,
+    endedAt: null,
     ...overrides,
   };
 }
@@ -117,5 +133,75 @@ describe("computeTasks — price_drop", () => {
       );
       expect(tasks.filter((t) => t.type === "price_drop")).toEqual([]);
     }
+  });
+});
+
+describe("computeTasks — relist", () => {
+  const published = { id: 1, status: "published" as const, askingPrice: 6800 };
+
+  it("suggests delete-repost relist on OfferUp after 7 days", () => {
+    const item = makeItem(published);
+    const tasks = computeTasks(
+      inputs({ items: [item], activeListings: [makeListing({ listedAt: "2026-07-01 12:00:00" })] })
+    );
+    expect(tasks).toContainEqual({
+      type: "relist", itemId: 1, itemName: item.name, listingId: 1,
+      publisherId: "offerup", publisherName: "OfferUp", action: "relist", ageDays: 9,
+    });
+  });
+
+  it("nothing before the channel interval", () => {
+    const item = makeItem(published);
+    const tasks = computeTasks(
+      inputs({ items: [item], activeListings: [makeListing({ listedAt: "2026-07-05 12:00:00" })] })
+    );
+    expect(tasks.filter((t) => t.type === "relist")).toEqual([]);
+  });
+
+  it("reddit never suggests inside its 7-day hard cooldown", () => {
+    const item = makeItem(published);
+    const listing = makeListing({ publisher: "reddit-watchexchange", listedAt: "2026-07-04 12:00:00" });
+    const tasks = computeTasks(inputs({ items: [item], activeListings: [listing] }));
+    expect(tasks.filter((t) => t.type === "relist")).toEqual([]);
+  });
+
+  it("facebook: renew action measured from renewedAt", () => {
+    const item = makeItem(published);
+    const listing = makeListing({
+      publisher: "facebook", listedAt: "2026-06-20 12:00:00", renewedAt: "2026-07-01 12:00:00",
+    });
+    const tasks = computeTasks(inputs({ items: [item], activeListings: [listing] }));
+    const relist = tasks.find((t) => t.type === "relist");
+    expect(relist).toMatchObject({ publisherId: "facebook", action: "renew", ageDays: 9 });
+  });
+
+  it("facebook: fresh relist once listing is 42+ days old", () => {
+    const item = makeItem(published);
+    const listing = makeListing({
+      publisher: "facebook", listedAt: "2026-05-20 12:00:00", renewedAt: "2026-07-01 12:00:00",
+    });
+    const tasks = computeTasks(inputs({ items: [item], activeListings: [listing] }));
+    expect(tasks.find((t) => t.type === "relist")).toMatchObject({ action: "relist" });
+  });
+
+  it("recent renew suppresses even an old listing (unless fresh-relist due)", () => {
+    const item = makeItem(published);
+    const listing = makeListing({
+      publisher: "facebook", listedAt: "2026-06-25 12:00:00", renewedAt: "2026-07-08 12:00:00",
+    });
+    const tasks = computeTasks(inputs({ items: [item], activeListings: [listing] }));
+    expect(tasks.filter((t) => t.type === "relist")).toEqual([]);
+  });
+
+  it("snoozed item suppresses relist tasks too", () => {
+    const item = makeItem({ ...published, snoozedUntil: "2026-07-20" });
+    const tasks = computeTasks(inputs({ items: [item], activeListings: [makeListing()] }));
+    expect(tasks).toEqual([]);
+  });
+
+  it("unknown publisher id in ledger is skipped silently", () => {
+    const item = makeItem(published);
+    const listing = makeListing({ publisher: "ebay-legacy" });
+    expect(computeTasks(inputs({ items: [item], activeListings: [listing] }))).toEqual([]);
   });
 });

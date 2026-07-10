@@ -63,5 +63,37 @@ export function computeTasks(inputs: TaskInputs): Task[] {
     });
   }
 
+  const itemById = new Map(items.map((i) => [i.id, i]));
+  const publisherById = new Map(inputs.publishers.map((p) => [p.id, p]));
+
+  for (const listing of inputs.activeListings) {
+    const item = itemById.get(listing.itemId);
+    if (!item || item.status !== "published" || isSnoozed(item, now)) continue;
+    const pub = publisherById.get(listing.publisher);
+    if (!pub) continue;
+    const policy = pub.relistPolicy;
+
+    const listedAge = daysBetween(parseDbDate(listing.listedAt), now);
+    const anchor = parseDbDate(listing.renewedAt ?? listing.listedAt);
+    const anchorAge = daysBetween(anchor, now);
+
+    const freshDue =
+      policy.freshRelistAfterDays != null && listedAge >= policy.freshRelistAfterDays;
+    const due = anchorAge >= Math.max(policy.intervalDays, policy.minIntervalDays);
+    if (!due && !freshDue) continue;
+    if (anchorAge < policy.minIntervalDays) continue; // hard platform rule, always wins
+
+    tasks.push({
+      type: "relist",
+      itemId: item.id,
+      itemName: item.name,
+      listingId: listing.id,
+      publisherId: pub.id,
+      publisherName: pub.name,
+      action: policy.method === "renew-then-repost" && !freshDue ? "renew" : "relist",
+      ageDays: anchorAge,
+    });
+  }
+
   return tasks;
 }
