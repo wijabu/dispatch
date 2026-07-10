@@ -18,6 +18,13 @@ export const ITEM_STATUSES = [
 
 export type ItemStatus = (typeof ITEM_STATUSES)[number];
 
+// needs_repricing / needs_relisting are obsolete as of v1.1 — "needs
+// attention" is computed by the task engine, never stored. Kept in the
+// enum for DB compatibility; hidden from all pickers.
+export const VISIBLE_ITEM_STATUSES = ITEM_STATUSES.filter(
+  (s) => s !== "needs_repricing" && s !== "needs_relisting"
+);
+
 export const CONDITIONS = [
   "new",
   "like_new",
@@ -41,6 +48,11 @@ export const items = sqliteTable("items", {
   minimumPrice: real("minimum_price"),
   soldPrice: real("sold_price"),
   notes: text("notes").notNull().default(""),
+  // v1.1 repricing cadence — all optional; null = no cadence
+  dropAmount: real("drop_amount"),
+  dropPercent: real("drop_percent"),
+  dropIntervalDays: integer("drop_interval_days"),
+  snoozedUntil: text("snoozed_until"),
   // Category-specific fields (watch specs, electronics details, etc.)
   attributes: text("attributes", { mode: "json" })
     .$type<Record<string, string>>()
@@ -87,6 +99,8 @@ export const listings = sqliteTable("listings", {
   listedAt: text("listed_at")
     .notNull()
     .default(sql`(datetime('now'))`),
+  // last renew action on renew-method channels (Facebook/Craigslist)
+  renewedAt: text("renewed_at"),
   endedAt: text("ended_at"),
 });
 

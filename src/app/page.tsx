@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getItems, getFirstPhotos, getActiveListingsByItem } from "@/lib/queries";
 import { formatPrice, STATUS_LABELS } from "@/lib/format";
 import { StatusBadge } from "@/components/StatusBadge";
-import { ITEM_STATUSES, type ItemStatus } from "@/db/schema";
+import { VISIBLE_ITEM_STATUSES, type ItemStatus } from "@/db/schema";
 import { getPublisher } from "@/publishers";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +20,7 @@ export default async function Dashboard({
     counts.set(item.status, (counts.get(item.status) ?? 0) + 1);
   }
 
-  if (status && ITEM_STATUSES.includes(status as ItemStatus)) {
+  if (status && (VISIBLE_ITEM_STATUSES as string[]).includes(status)) {
     allItems = allItems.filter((item) => item.status === status);
   }
   const thumbnails = await getFirstPhotos(allItems.map((i) => i.id));
@@ -55,7 +55,7 @@ export default async function Dashboard({
         >
           All
         </Link>
-        {ITEM_STATUSES.map((s) => (
+        {VISIBLE_ITEM_STATUSES.map((s) => (
           <Link
             key={s}
             href={`/?status=${s}${q ? `&q=${encodeURIComponent(q)}` : ""}`}

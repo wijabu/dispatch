@@ -5,7 +5,7 @@ import { deleteItem, markSold, updateStatus } from "@/lib/actions";
 import { formatDate, formatPrice, CONDITION_LABELS, STATUS_LABELS } from "@/lib/format";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PhotoGrid } from "@/components/PhotoGrid";
-import { ITEM_STATUSES } from "@/db/schema";
+import { VISIBLE_ITEM_STATUSES } from "@/db/schema";
 
 export default async function ItemPage({
   params,
@@ -19,7 +19,7 @@ export default async function ItemPage({
   async function statusAction(formData: FormData) {
     "use server";
     const status = formData.get("status");
-    const target = ITEM_STATUSES.find((s) => s === status);
+    const target = VISIBLE_ITEM_STATUSES.find((s) => s === status);
     if (target && item) await updateStatus(item.id, target);
   }
 
@@ -168,7 +168,7 @@ export default async function ItemPage({
               defaultValue={item.status}
               className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
             >
-              {ITEM_STATUSES.map((s) => (
+              {VISIBLE_ITEM_STATUSES.map((s) => (
                 <option key={s} value={s}>
                   {STATUS_LABELS[s]}
                 </option>

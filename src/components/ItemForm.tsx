@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { Item } from "@/db/schema";
-import { CONDITIONS, ITEM_STATUSES } from "@/db/schema";
+import { CONDITIONS, VISIBLE_ITEM_STATUSES } from "@/db/schema";
 import { CONDITION_LABELS, STATUS_LABELS } from "@/lib/format";
 import { CATEGORY_SUGGESTIONS } from "@/config/categories";
 import { PhotoDropzone } from "@/components/PhotoDropzone";
@@ -168,7 +168,7 @@ export function ItemForm({
             defaultValue={item?.status ?? "draft"}
             className={inputClass}
           >
-            {ITEM_STATUSES.map((s) => (
+            {VISIBLE_ITEM_STATUSES.map((s) => (
               <option key={s} value={s}>
                 {STATUS_LABELS[s]}
               </option>
