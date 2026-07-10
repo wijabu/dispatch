@@ -9,7 +9,7 @@ import {
   type Condition,
   type ItemStatus,
   CONDITIONS,
-  ITEM_STATUSES,
+  VISIBLE_ITEM_STATUSES,
 } from "@/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -48,8 +48,8 @@ function itemFieldsFromForm(formData: FormData) {
     condition: (CONDITIONS.includes(condition as Condition)
       ? condition
       : "good") as Condition,
-    status: (ITEM_STATUSES.includes(status as ItemStatus)
-      ? status
+    status: (VISIBLE_ITEM_STATUSES.includes(status as any)
+      ? (status as ItemStatus)
       : "draft") as ItemStatus,
     purchasePrice: parsePrice(formData.get("purchasePrice")),
     askingPrice: parsePrice(formData.get("askingPrice")),
