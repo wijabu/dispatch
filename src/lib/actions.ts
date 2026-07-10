@@ -16,6 +16,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { convertHeicToJpeg, isHeic } from "@/lib/photo-convert";
 import { setPhotoOrder, setPrimaryPhoto } from "@/lib/photo-order";
+import { applyPriceDropCore, confirmListingUpdatedCore, snoozeItemCore } from "@/lib/task-actions";
 import crypto from "crypto";
 import path from "path";
 import fs from "fs/promises";
@@ -203,6 +204,34 @@ export async function reorderPhotos(itemId: number, orderedIds: number[]) {
   revalidatePath("/");
   revalidatePath(`/items/${itemId}`);
   revalidatePath(`/items/${itemId}/edit`);
+}
+
+export async function applyPriceDrop(itemId: number) {
+  await applyPriceDropCore(db, itemId, new Date());
+  revalidatePath("/");
+  revalidatePath(`/items/${itemId}`);
+  revalidatePath(`/items/${itemId}/publish`);
+}
+
+export async function confirmListingUpdated(listingId: number, itemId: number) {
+  await confirmListingUpdatedCore(db, listingId, new Date());
+  revalidatePath("/");
+  revalidatePath(`/items/${itemId}/publish`);
+}
+
+export async function snoozeItem(itemId: number) {
+  await snoozeItemCore(db, itemId, new Date());
+  revalidatePath("/");
+}
+
+export async function endListingForRelist(listingId: number, itemId: number) {
+  await db
+    .update(listings)
+    .set({ status: "ended", endedAt: sql`(datetime('now'))` })
+    .where(eq(listings.id, listingId));
+  revalidatePath("/");
+  revalidatePath(`/items/${itemId}/publish`);
+  redirect(`/items/${itemId}/publish`);
 }
 
 export async function markListed(formData: FormData) {
