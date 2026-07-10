@@ -30,6 +30,7 @@ export function ChannelCard({
   listing,
   itemId,
   defaultPrice,
+  policyLabel,
 }: {
   publisherId: string;
   publisherName: string;
@@ -37,6 +38,7 @@ export function ChannelCard({
   listing: Listing | null;
   itemId: number;
   defaultPrice: number | null;
+  policyLabel: string;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -44,7 +46,10 @@ export function ChannelCard({
     <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <span className="font-semibold">{publisherName}</span>
+          <div>
+            <span className="font-semibold">{publisherName}</span>
+            <div className="text-[11px] text-zinc-500">{policyLabel}</div>
+          </div>
           {listing && (
             <span className="ml-2 text-xs text-purple-600 dark:text-purple-400">
               listed at {formatPrice(listing.listedPrice)} on {formatDate(listing.listedAt)}

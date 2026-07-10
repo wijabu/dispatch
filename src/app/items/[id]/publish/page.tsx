@@ -4,6 +4,7 @@ import { getItem } from "@/lib/queries";
 import { publishers } from "@/publishers";
 import { ChannelCard } from "@/components/ChannelCard";
 import { StatusBadge } from "@/components/StatusBadge";
+import { describeRelistPolicy } from "@/lib/format";
 
 export default async function PublishPage({
   params,
@@ -46,6 +47,7 @@ export default async function PublishPage({
               listing={activeListing}
               itemId={item.id}
               defaultPrice={item.askingPrice}
+              policyLabel={describeRelistPolicy(pub.relistPolicy)}
             />
           );
         })}

@@ -1,4 +1,5 @@
 import type { Condition, ItemStatus } from "@/db/schema";
+import type { RelistPolicy } from "@/publishers/types";
 
 export const STATUS_LABELS: Record<ItemStatus, string> = {
   draft: "Draft",
@@ -47,4 +48,18 @@ export function formatDate(date: string | null): string {
     "en-US",
     { month: "short", day: "numeric", year: "numeric" }
   );
+}
+
+export function describeRelistPolicy(policy: RelistPolicy): string {
+  const every = `every ${policy.intervalDays} days`;
+  switch (policy.method) {
+    case "repost":
+      return `Repost ${every} (no sooner — platform rule)`;
+    case "delete-repost":
+      return `Delete + fresh post ${every}`;
+    case "renew-then-repost":
+      return `Renew ${every}${policy.freshRelistAfterDays ? `; fresh relist after ${policy.freshRelistAfterDays} days` : ""}`;
+    case "bump":
+      return `Bump thread ${every}`;
+  }
 }
