@@ -5,6 +5,7 @@ import type { Item } from "@/db/schema";
 import { CONDITIONS, ITEM_STATUSES } from "@/db/schema";
 import { CONDITION_LABELS, STATUS_LABELS } from "@/lib/format";
 import { CATEGORY_SUGGESTIONS } from "@/config/categories";
+import { PhotoDropzone } from "@/components/PhotoDropzone";
 
 const inputClass =
   "w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900";
@@ -263,17 +264,10 @@ export function ItemForm({
       </div>
 
       <div>
-        <label className={labelClass} htmlFor="photos">
+        <label className={labelClass}>
           {item ? "Add photos" : "Photos"}
         </label>
-        <input
-          id="photos"
-          name="photos"
-          type="file"
-          accept="image/*"
-          multiple
-          className="block w-full text-sm text-zinc-600 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white dark:text-zinc-400 dark:file:bg-zinc-100 dark:file:text-zinc-900"
-        />
+        <PhotoDropzone />
       </div>
 
       <div className="flex gap-3">
