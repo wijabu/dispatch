@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { getItems, getFirstPhotos } from "@/lib/queries";
+import { getItems, getFirstPhotos, getActiveListingsByItem } from "@/lib/queries";
 import { formatPrice, STATUS_LABELS } from "@/lib/format";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ITEM_STATUSES, type ItemStatus } from "@/db/schema";
+import { getPublisher } from "@/publishers";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,7 @@ export default async function Dashboard({
     allItems = allItems.filter((item) => item.status === status);
   }
   const thumbnails = await getFirstPhotos(allItems.map((i) => i.id));
+  const listedWhere = await getActiveListingsByItem();
 
   const counts = new Map<string, number>();
   for (const item of allItems) {
@@ -119,6 +121,18 @@ export default async function Dashboard({
                   <StatusBadge status={item.status} />
                   <span className="text-xs text-zinc-500">{item.category}</span>
                 </div>
+                {(listedWhere.get(item.id) ?? []).length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {(listedWhere.get(item.id) ?? []).map((pubId) => (
+                      <span
+                        key={pubId}
+                        className="rounded bg-green-50 px-1.5 py-0.5 text-[10px] font-medium text-green-700 dark:bg-green-950 dark:text-green-400"
+                      >
+                        {getPublisher(pubId)?.name ?? pubId}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </Link>
           ))}
