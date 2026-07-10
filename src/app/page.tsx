@@ -14,16 +14,17 @@ export default async function Dashboard({
 }) {
   const { q, status } = await searchParams;
   let allItems = await getItems(q);
-  if (status && ITEM_STATUSES.includes(status as ItemStatus)) {
-    allItems = allItems.filter((item) => item.status === status);
-  }
-  const thumbnails = await getFirstPhotos(allItems.map((i) => i.id));
-  const listedWhere = await getActiveListingsByItem();
 
   const counts = new Map<string, number>();
   for (const item of allItems) {
     counts.set(item.status, (counts.get(item.status) ?? 0) + 1);
   }
+
+  if (status && ITEM_STATUSES.includes(status as ItemStatus)) {
+    allItems = allItems.filter((item) => item.status === status);
+  }
+  const thumbnails = await getFirstPhotos(allItems.map((i) => i.id));
+  const listedWhere = await getActiveListingsByItem();
 
   return (
     <div className="space-y-6">
