@@ -66,6 +66,7 @@ export function computeTasks(inputs: TaskInputs): Task[] {
     }
     if (item.status !== "published") continue;
 
+    let emittedDrop = false;
     if (item.dropIntervalDays != null) {
       const target = computeDropTarget(item);
       if (target != null && item.askingPrice != null) {
@@ -75,8 +76,17 @@ export function computeTasks(inputs: TaskInputs): Task[] {
             type: "price_drop", itemId: item.id, itemName: item.name,
             currentPrice: item.askingPrice, targetPrice: target,
           });
+          emittedDrop = true;
         }
       }
+    }
+
+    // An ended-listing item with no active listings has fallen out of the
+    // task system entirely (status stays "published" until the user
+    // re-publishes). Nudge them back, unless a drop is already due — the
+    // drop takes precedence so we don't double up on a single item.
+    if (!emittedDrop && !activeByItem.has(item.id)) {
+      ready.push({ type: "ready_to_publish", itemId: item.id, itemName: item.name });
     }
   }
 
@@ -96,7 +106,11 @@ export function computeTasks(inputs: TaskInputs): Task[] {
 
     const policy = pub.relistPolicy;
     const listedAge = daysBetween(parseDbDate(listing.listedAt), now);
-    const anchorAge = daysBetween(parseDbDate(listing.renewedAt ?? listing.listedAt), now);
+    const anchor =
+      policy.method === "renew-then-repost"
+        ? (listing.renewedAt ?? listing.listedAt)
+        : listing.listedAt;
+    const anchorAge = daysBetween(parseDbDate(anchor), now);
     const freshDue =
       policy.freshRelistAfterDays != null && listedAge >= policy.freshRelistAfterDays;
     const due = anchorAge >= Math.max(policy.intervalDays, policy.minIntervalDays);

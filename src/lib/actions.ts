@@ -16,7 +16,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { convertHeicToJpeg, isHeic } from "@/lib/photo-convert";
 import { setPhotoOrder, setPrimaryPhoto } from "@/lib/photo-order";
-import { applyPriceDropCore, confirmListingUpdatedCore, snoozeItemCore } from "@/lib/task-actions";
+import {
+  applyPriceDropCore,
+  markListingRenewedCore,
+  snoozeItemCore,
+  syncListingPriceCore,
+} from "@/lib/task-actions";
 import crypto from "crypto";
 import path from "path";
 import fs from "fs/promises";
@@ -49,7 +54,7 @@ function itemFieldsFromForm(formData: FormData) {
     condition: (CONDITIONS.includes(condition as Condition)
       ? condition
       : "good") as Condition,
-    status: (VISIBLE_ITEM_STATUSES.includes(status as any)
+    status: (VISIBLE_ITEM_STATUSES.includes(status as (typeof VISIBLE_ITEM_STATUSES)[number])
       ? (status as ItemStatus)
       : "draft") as ItemStatus,
     purchasePrice: parsePrice(formData.get("purchasePrice")),
@@ -225,8 +230,14 @@ export async function applyPriceDrop(itemId: number) {
   revalidatePath(`/items/${itemId}/publish`);
 }
 
-export async function confirmListingUpdated(listingId: number, itemId: number) {
-  await confirmListingUpdatedCore(db, listingId, new Date());
+export async function confirmListingPriceUpdated(listingId: number, itemId: number) {
+  await syncListingPriceCore(db, listingId);
+  revalidatePath("/");
+  revalidatePath(`/items/${itemId}/publish`);
+}
+
+export async function confirmListingRenewed(listingId: number, itemId: number) {
+  await markListingRenewedCore(db, listingId, new Date());
   revalidatePath("/");
   revalidatePath(`/items/${itemId}/publish`);
 }

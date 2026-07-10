@@ -101,7 +101,17 @@ describe("computeTasks — price_drop", () => {
     const tasks = computeTasks(
       inputs({ items: [item], lastPriceChange: new Map([[1, "2026-07-05 12:00:00"]]) })
     );
-    expect(tasks).toEqual([]);
+    expect(tasks.filter((t) => t.type === "price_drop")).toEqual([]);
+  });
+
+  it("emits a drop exactly at the interval boundary", () => {
+    const item = makeItem(cadence);
+    const tasks = computeTasks(
+      inputs({ items: [item], lastPriceChange: new Map([[1, "2026-07-03 12:00:00"]]) })
+    );
+    expect(tasks).toEqual([
+      { type: "price_drop", itemId: 1, itemName: item.name, currentPrice: 6800, targetPrice: 6596 },
+    ]);
   });
 
   it("falls back to createdAt when no price history exists", () => {
@@ -205,6 +215,19 @@ describe("computeTasks — relist", () => {
     expect(computeTasks(inputs({ items: [item], activeListings: [listing] }))).toEqual([]);
   });
 
+  it("offerup ignores renewedAt (delete-repost channel) — anchor stays listedAt", () => {
+    const item = makeItem(published);
+    const listing = makeListing({
+      listedAt: "2026-07-01 12:00:00", // 9 days old
+      renewedAt: "2026-07-09 12:00:00", // 1 day ago — must not reset the clock
+    });
+    const tasks = computeTasks(inputs({ items: [item], activeListings: [listing] }));
+    expect(tasks).toContainEqual({
+      type: "relist", itemId: 1, itemName: item.name, listingId: 1,
+      publisherId: "offerup", publisherName: "OfferUp", action: "relist", ageDays: 9,
+    });
+  });
+
   it("hard minimum interval suppresses even a due fresh relist", () => {
     const item = makeItem(published);
     // listed 51 days ago (fresh relist due) but renewed 3 days ago —
@@ -263,6 +286,25 @@ describe("computeTasks — ready_to_publish", () => {
     expect(listed.filter((t) => t.type === "ready_to_publish")).toEqual([]);
     const snoozed = makeItem({ id: 2, status: "ready", snoozedUntil: "2026-08-01" });
     expect(computeTasks(inputs({ items: [snoozed] }))).toEqual([]);
+  });
+
+  it("nudges published items with no active listings too (ended-listing fallthrough)", () => {
+    const item = makeItem({ id: 3, status: "published", askingPrice: 500 });
+    const tasks = computeTasks(inputs({ items: [item] }));
+    expect(tasks).toEqual([{ type: "ready_to_publish", itemId: 3, itemName: item.name }]);
+  });
+
+  it("a due price drop takes precedence — no nudge alongside it", () => {
+    const item = makeItem({
+      id: 3, status: "published", askingPrice: 6800, minimumPrice: 6200,
+      dropPercent: 3, dropIntervalDays: 7,
+    });
+    const tasks = computeTasks(
+      inputs({ items: [item], lastPriceChange: new Map([[3, "2026-07-01 12:00:00"]]) })
+    );
+    expect(tasks).toEqual([
+      { type: "price_drop", itemId: 3, itemName: item.name, currentPrice: 6800, targetPrice: 6596 },
+    ]);
   });
 });
 

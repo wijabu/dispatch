@@ -6,7 +6,12 @@ import { eq } from "drizzle-orm";
 import path from "path";
 import * as schema from "@/db/schema";
 import { items, listings, priceHistory } from "@/db/schema";
-import { applyPriceDropCore, confirmListingUpdatedCore, snoozeItemCore } from "../task-actions";
+import {
+  applyPriceDropCore,
+  markListingRenewedCore,
+  snoozeItemCore,
+  syncListingPriceCore,
+} from "../task-actions";
 
 const NOW = new Date("2026-07-10T12:00:00Z");
 let db: BetterSQLite3Database<typeof schema>;
@@ -46,27 +51,30 @@ describe("applyPriceDropCore", () => {
   });
 });
 
-describe("confirmListingUpdatedCore", () => {
-  it("syncs listedPrice to asking and stamps renewedAt", async () => {
-    const [listing] = await db
-      .insert(listings)
-      .values({ itemId, publisher: "facebook", listedPrice: 6800 })
-      .returning();
-    await confirmListingUpdatedCore(db, listing.id, NOW);
-    const [after] = await db.select().from(listings).where(eq(listings.id, listing.id));
-    expect(after.listedPrice).toBe(6800); // asking unchanged in this test
-    expect(after.renewedAt).toBe("2026-07-10 12:00:00");
-  });
-
-  it("picks up a changed asking price", async () => {
+describe("syncListingPriceCore", () => {
+  it("syncs listedPrice to asking price, leaving renewedAt untouched", async () => {
     await db.update(items).set({ askingPrice: 6596 }).where(eq(items.id, itemId));
     const [listing] = await db
       .insert(listings)
       .values({ itemId, publisher: "offerup", listedPrice: 6800 })
       .returning();
-    await confirmListingUpdatedCore(db, listing.id, NOW);
+    await syncListingPriceCore(db, listing.id);
     const [after] = await db.select().from(listings).where(eq(listings.id, listing.id));
     expect(after.listedPrice).toBe(6596);
+    expect(after.renewedAt).toBeNull();
+  });
+});
+
+describe("markListingRenewedCore", () => {
+  it("stamps renewedAt, leaving listedPrice unchanged", async () => {
+    const [listing] = await db
+      .insert(listings)
+      .values({ itemId, publisher: "facebook", listedPrice: 6800 })
+      .returning();
+    await markListingRenewedCore(db, listing.id, NOW);
+    const [after] = await db.select().from(listings).where(eq(listings.id, listing.id));
+    expect(after.renewedAt).toBe("2026-07-10 12:00:00");
+    expect(after.listedPrice).toBe(6800);
   });
 });
 

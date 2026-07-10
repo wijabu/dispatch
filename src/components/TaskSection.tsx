@@ -2,7 +2,8 @@ import Link from "next/link";
 import type { Task } from "@/lib/tasks";
 import {
   applyPriceDrop,
-  confirmListingUpdated,
+  confirmListingPriceUpdated,
+  confirmListingRenewed,
   endListingForRelist,
   snoozeItem,
 } from "@/lib/actions";
@@ -66,7 +67,7 @@ export function TaskSection({ tasks }: { tasks: Task[] }) {
                     listed at {formatPrice(task.listedPrice)}, asking is now{" "}
                     <strong>{formatPrice(task.askingPrice)}</strong>
                   </span>
-                  <form action={confirmListingUpdated.bind(null, task.listingId, task.itemId)}>
+                  <form action={confirmListingPriceUpdated.bind(null, task.listingId, task.itemId)}>
                     <button className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
                       ✓ I updated it
                     </button>
@@ -87,7 +88,7 @@ export function TaskSection({ tasks }: { tasks: Task[] }) {
                   </span>
                   <span className="flex gap-1.5">
                     {task.action === "renew" ? (
-                      <form action={confirmListingUpdated.bind(null, task.listingId, task.itemId)}>
+                      <form action={confirmListingRenewed.bind(null, task.listingId, task.itemId)}>
                         <button className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
                           ✓ I renewed it
                         </button>
