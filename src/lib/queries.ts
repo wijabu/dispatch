@@ -59,3 +59,20 @@ export async function getActiveListingsByItem(): Promise<Map<number, string[]>> 
   }
   return map;
 }
+
+export async function getTaskData() {
+  const allItems = await db.select().from(items);
+  const activeListings = await db
+    .select()
+    .from(listings)
+    .where(eq(listings.status, "active"));
+  const history = await db
+    .select()
+    .from(priceHistory)
+    .orderBy(desc(priceHistory.changedAt));
+  const lastPriceChange = new Map<number, string>();
+  for (const row of history) {
+    if (!lastPriceChange.has(row.itemId)) lastPriceChange.set(row.itemId, row.changedAt);
+  }
+  return { items: allItems, activeListings, lastPriceChange };
+}

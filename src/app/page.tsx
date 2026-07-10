@@ -1,9 +1,16 @@
 import Link from "next/link";
-import { getItems, getFirstPhotos, getActiveListingsByItem } from "@/lib/queries";
+import {
+  getItems,
+  getFirstPhotos,
+  getActiveListingsByItem,
+  getTaskData,
+} from "@/lib/queries";
 import { formatPrice, STATUS_LABELS } from "@/lib/format";
 import { StatusBadge } from "@/components/StatusBadge";
 import { VISIBLE_ITEM_STATUSES, type ItemStatus } from "@/db/schema";
-import { getPublisher } from "@/publishers";
+import { getPublisher, publishers } from "@/publishers";
+import { computeTasks, parseDbDate } from "@/lib/tasks";
+import { TaskSection } from "@/components/TaskSection";
 
 export const dynamic = "force-dynamic";
 
@@ -26,8 +33,12 @@ export default async function Dashboard({
   const thumbnails = await getFirstPhotos(allItems.map((i) => i.id));
   const listedWhere = await getActiveListingsByItem();
 
+  const taskData = await getTaskData();
+  const tasks = computeTasks({ ...taskData, publishers, now: new Date() });
+
   return (
     <div className="space-y-6">
+      <TaskSection tasks={tasks} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Inventory</h1>
         <form className="flex gap-2" action="/">
@@ -120,6 +131,9 @@ export default async function Dashboard({
                 </div>
                 <div className="flex items-center gap-2">
                   <StatusBadge status={item.status} />
+                  {item.snoozedUntil && parseDbDate(item.snoozedUntil) > new Date() && (
+                    <span title={`Snoozed until ${item.snoozedUntil}`} className="text-xs">💤</span>
+                  )}
                   <span className="text-xs text-zinc-500">{item.category}</span>
                 </div>
                 {(listedWhere.get(item.id) ?? []).length > 0 && (
