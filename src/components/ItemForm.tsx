@@ -24,7 +24,9 @@ export function ItemForm({
   const [category, setCategory] = useState(item?.category ?? "general");
 
   function addAttribute(key = "") {
-    setAttributes([...attributes, [key, ""]]);
+    // Functional update: rapid successive clicks (e.g. two chips) are batched
+    // by React, so spreading the captured `attributes` would drop rows.
+    setAttributes((prev) => [...prev, [key, ""]]);
   }
 
   return (
