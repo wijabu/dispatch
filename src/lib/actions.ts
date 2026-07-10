@@ -14,6 +14,7 @@ import {
 import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { convertHeicToJpeg, isHeic } from "@/lib/photo-convert";
 import crypto from "crypto";
 import path from "path";
 import fs from "fs/promises";
@@ -71,11 +72,15 @@ async function savePhotos(itemId: number, formData: FormData) {
 
   for (const file of files) {
     const ext = path.extname(file.name).toLowerCase() || ".jpg";
-    const filename = `${itemId}-${crypto.randomUUID()}${ext}`;
+    let filename = `${itemId}-${crypto.randomUUID()}${ext}`;
     await fs.writeFile(
       path.join(PHOTOS_DIR, filename),
       Buffer.from(await file.arrayBuffer())
     );
+    if (isHeic(filename)) {
+      const jpegPath = await convertHeicToJpeg(path.join(PHOTOS_DIR, filename));
+      filename = path.basename(jpegPath);
+    }
     await db.insert(photos).values({
       itemId,
       path: filename,
