@@ -204,4 +204,17 @@ describe("computeTasks — relist", () => {
     const listing = makeListing({ publisher: "ebay-legacy" });
     expect(computeTasks(inputs({ items: [item], activeListings: [listing] }))).toEqual([]);
   });
+
+  it("hard minimum interval suppresses even a due fresh relist", () => {
+    const item = makeItem(published);
+    // listed 51 days ago (fresh relist due) but renewed 3 days ago —
+    // inside Facebook's 7-day hard window, so nothing may be suggested
+    const listing = makeListing({
+      publisher: "facebook",
+      listedAt: "2026-05-20 12:00:00",
+      renewedAt: "2026-07-07 12:00:00",
+    });
+    const tasks = computeTasks(inputs({ items: [item], activeListings: [listing] }));
+    expect(tasks.filter((t) => t.type === "relist")).toEqual([]);
+  });
 });
