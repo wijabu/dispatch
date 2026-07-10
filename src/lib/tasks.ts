@@ -45,55 +45,70 @@ function isSnoozed(item: Item, now: Date): boolean {
 
 export function computeTasks(inputs: TaskInputs): Task[] {
   const { items, now, lastPriceChange } = inputs;
-  const tasks: Task[] = [];
-
-  for (const item of items) {
-    if (item.status !== "published" || isSnoozed(item, now)) continue;
-    if (item.dropIntervalDays == null) continue;
-    const target = computeDropTarget(item);
-    if (target == null || item.askingPrice == null) continue;
-    const anchor = parseDbDate(lastPriceChange.get(item.id) ?? item.createdAt);
-    if (daysBetween(anchor, now) < item.dropIntervalDays) continue;
-    tasks.push({
-      type: "price_drop",
-      itemId: item.id,
-      itemName: item.name,
-      currentPrice: item.askingPrice,
-      targetPrice: target,
-    });
-  }
+  const drops: Task[] = [];
+  const stale: Task[] = [];
+  const relists: Task[] = [];
+  const ready: Task[] = [];
 
   const itemById = new Map(items.map((i) => [i.id, i]));
   const publisherById = new Map(inputs.publishers.map((p) => [p.id, p]));
+  const activeByItem = new Map<number, number>();
+  for (const l of inputs.activeListings) {
+    activeByItem.set(l.itemId, (activeByItem.get(l.itemId) ?? 0) + 1);
+  }
+
+  for (const item of items) {
+    if (isSnoozed(item, now)) continue;
+
+    if (item.status === "ready" && !activeByItem.has(item.id)) {
+      ready.push({ type: "ready_to_publish", itemId: item.id, itemName: item.name });
+      continue;
+    }
+    if (item.status !== "published") continue;
+
+    if (item.dropIntervalDays != null) {
+      const target = computeDropTarget(item);
+      if (target != null && item.askingPrice != null) {
+        const anchor = parseDbDate(lastPriceChange.get(item.id) ?? item.createdAt);
+        if (daysBetween(anchor, now) >= item.dropIntervalDays) {
+          drops.push({
+            type: "price_drop", itemId: item.id, itemName: item.name,
+            currentPrice: item.askingPrice, targetPrice: target,
+          });
+        }
+      }
+    }
+  }
 
   for (const listing of inputs.activeListings) {
     const item = itemById.get(listing.itemId);
     if (!item || item.status !== "published" || isSnoozed(item, now)) continue;
     const pub = publisherById.get(listing.publisher);
     if (!pub) continue;
+
+    if (item.askingPrice != null && listing.listedPrice !== item.askingPrice) {
+      stale.push({
+        type: "stale_price", itemId: item.id, itemName: item.name,
+        listingId: listing.id, publisherId: pub.id, publisherName: pub.name,
+        listedPrice: listing.listedPrice, askingPrice: item.askingPrice,
+      });
+    }
+
     const policy = pub.relistPolicy;
-
     const listedAge = daysBetween(parseDbDate(listing.listedAt), now);
-    const anchor = parseDbDate(listing.renewedAt ?? listing.listedAt);
-    const anchorAge = daysBetween(anchor, now);
-
+    const anchorAge = daysBetween(parseDbDate(listing.renewedAt ?? listing.listedAt), now);
     const freshDue =
       policy.freshRelistAfterDays != null && listedAge >= policy.freshRelistAfterDays;
     const due = anchorAge >= Math.max(policy.intervalDays, policy.minIntervalDays);
-    if (!due && !freshDue) continue;
-    if (anchorAge < policy.minIntervalDays) continue; // hard platform rule, always wins
-
-    tasks.push({
-      type: "relist",
-      itemId: item.id,
-      itemName: item.name,
-      listingId: listing.id,
-      publisherId: pub.id,
-      publisherName: pub.name,
-      action: policy.method === "renew-then-repost" && !freshDue ? "renew" : "relist",
-      ageDays: anchorAge,
-    });
+    if ((due || freshDue) && anchorAge >= policy.minIntervalDays) {
+      relists.push({
+        type: "relist", itemId: item.id, itemName: item.name,
+        listingId: listing.id, publisherId: pub.id, publisherName: pub.name,
+        action: policy.method === "renew-then-repost" && !freshDue ? "renew" : "relist",
+        ageDays: anchorAge,
+      });
+    }
   }
 
-  return tasks;
+  return [...drops, ...stale, ...relists, ...ready];
 }

@@ -218,3 +218,65 @@ describe("computeTasks — relist", () => {
     expect(tasks.filter((t) => t.type === "relist")).toEqual([]);
   });
 });
+
+describe("computeTasks — stale_price", () => {
+  it("flags an active listing whose price differs from asking", () => {
+    const item = makeItem({ id: 1, status: "published", askingPrice: 6596 });
+    const listing = makeListing({ listedPrice: 6800, listedAt: "2026-07-09 12:00:00" });
+    const tasks = computeTasks(inputs({ items: [item], activeListings: [listing] }));
+    expect(tasks).toContainEqual({
+      type: "stale_price", itemId: 1, itemName: item.name, listingId: 1,
+      publisherId: "offerup", publisherName: "OfferUp", listedPrice: 6800, askingPrice: 6596,
+    });
+  });
+
+  it("null listedPrice counts as stale when asking exists", () => {
+    const item = makeItem({ id: 1, status: "published", askingPrice: 100 });
+    const listing = makeListing({ listedPrice: null, listedAt: "2026-07-09 12:00:00" });
+    const tasks = computeTasks(inputs({ items: [item], activeListings: [listing] }));
+    expect(tasks.filter((t) => t.type === "stale_price")).toHaveLength(1);
+  });
+
+  it("matching price → no task; null asking → no task", () => {
+    const matching = makeItem({ id: 1, status: "published", askingPrice: 6800 });
+    const noAsk = makeItem({ id: 1, status: "published", askingPrice: null });
+    const listing = makeListing({ listedPrice: 6800, listedAt: "2026-07-09 12:00:00" });
+    expect(computeTasks(inputs({ items: [matching], activeListings: [listing] }))
+      .filter((t) => t.type === "stale_price")).toEqual([]);
+    expect(computeTasks(inputs({ items: [noAsk], activeListings: [listing] }))
+      .filter((t) => t.type === "stale_price")).toEqual([]);
+  });
+});
+
+describe("computeTasks — ready_to_publish", () => {
+  it("nudges ready items with no active listings", () => {
+    const item = makeItem({ id: 2, status: "ready" });
+    const tasks = computeTasks(inputs({ items: [item] }));
+    expect(tasks).toEqual([{ type: "ready_to_publish", itemId: 2, itemName: item.name }]);
+  });
+
+  it("no nudge when an active listing exists, or when snoozed", () => {
+    const item = makeItem({ id: 2, status: "ready" });
+    const listed = computeTasks(
+      inputs({ items: [item], activeListings: [makeListing({ itemId: 2, listedAt: "2026-07-09 12:00:00" })] })
+    );
+    expect(listed.filter((t) => t.type === "ready_to_publish")).toEqual([]);
+    const snoozed = makeItem({ id: 2, status: "ready", snoozedUntil: "2026-08-01" });
+    expect(computeTasks(inputs({ items: [snoozed] }))).toEqual([]);
+  });
+});
+
+describe("computeTasks — ordering", () => {
+  it("orders price_drop, stale_price, relist, ready_to_publish", () => {
+    const dropItem = makeItem({
+      id: 1, status: "published", askingPrice: 100, minimumPrice: 50,
+      dropAmount: 10, dropIntervalDays: 7, createdAt: "2026-06-01 12:00:00",
+    });
+    const readyItem = makeItem({ id: 2, status: "ready" });
+    const listing = makeListing({ itemId: 1, listedPrice: 90, listedAt: "2026-07-01 12:00:00" });
+    const types = computeTasks(
+      inputs({ items: [dropItem, readyItem], activeListings: [listing] })
+    ).map((t) => t.type);
+    expect(types).toEqual(["price_drop", "stale_price", "relist", "ready_to_publish"]);
+  });
+});
