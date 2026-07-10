@@ -4,17 +4,7 @@ import { useState } from "react";
 import type { Item } from "@/db/schema";
 import { CONDITIONS, ITEM_STATUSES } from "@/db/schema";
 import { CONDITION_LABELS, STATUS_LABELS } from "@/lib/format";
-
-const WATCH_ATTRIBUTE_SUGGESTIONS = [
-  "Brand",
-  "Model",
-  "Reference",
-  "Movement",
-  "Diameter",
-  "Box/Papers",
-  "Accessories",
-  "Year",
-];
+import { CATEGORY_SUGGESTIONS } from "@/config/categories";
 
 const inputClass =
   "w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900";
@@ -214,20 +204,22 @@ export function ItemForm({
             + Add attribute
           </button>
         </div>
-        {category === "watches" && (
+        {(CATEGORY_SUGGESTIONS[category] ?? []).filter(
+          (s) => !attributes.some(([k]) => k === s)
+        ).length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1">
-            {WATCH_ATTRIBUTE_SUGGESTIONS.filter(
-              (s) => !attributes.some(([k]) => k === s)
-            ).map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => addAttribute(s)}
-                className="rounded-full border border-zinc-300 px-2 py-0.5 text-xs text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
-              >
-                + {s}
-              </button>
-            ))}
+            {(CATEGORY_SUGGESTIONS[category] ?? [])
+              .filter((s) => !attributes.some(([k]) => k === s))
+              .map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => addAttribute(s)}
+                  className="rounded-full border border-zinc-300 px-2 py-0.5 text-xs text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                >
+                  + {s}
+                </button>
+              ))}
           </div>
         )}
         <div className="space-y-2">
