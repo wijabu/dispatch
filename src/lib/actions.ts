@@ -11,7 +11,7 @@ import {
   CONDITIONS,
   ITEM_STATUSES,
 } from "@/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import crypto from "crypto";
@@ -190,16 +190,40 @@ export async function markListed(formData: FormData) {
   const publisherId = String(formData.get("publisherId") ?? "");
   if (!itemId || !publisherId) throw new Error("itemId and publisherId are required");
 
-  await db.insert(listings).values({
-    itemId,
-    publisher: publisherId,
-    listedPrice: parsePrice(formData.get("listedPrice")),
-    url: String(formData.get("url") ?? "").trim() || null,
+  const listedPrice = parsePrice(formData.get("listedPrice"));
+  const url = String(formData.get("url") ?? "").trim() || null;
+
+  db.transaction((tx) => {
+    const [existing] = tx
+      .select()
+      .from(listings)
+      .where(
+        and(
+          eq(listings.itemId, itemId),
+          eq(listings.publisher, publisherId),
+          eq(listings.status, "active")
+        )
+      )
+      .all();
+    if (existing) return;
+
+    tx.insert(listings)
+      .values({
+        itemId,
+        publisher: publisherId,
+        listedPrice,
+        url,
+      })
+      .run();
+
+    const [item] = tx.select().from(items).where(eq(items.id, itemId)).all();
+    if (item && item.status !== "sold") {
+      tx.update(items)
+        .set({ status: "published", updatedAt: sql`(datetime('now'))` })
+        .where(eq(items.id, itemId))
+        .run();
+    }
   });
-  await db
-    .update(items)
-    .set({ status: "published", updatedAt: sql`(datetime('now'))` })
-    .where(eq(items.id, itemId));
 
   revalidatePath("/");
   revalidatePath(`/items/${itemId}`);
