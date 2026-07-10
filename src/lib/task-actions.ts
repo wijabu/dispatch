@@ -6,6 +6,11 @@ import { computeDropTarget } from "./tasks";
 
 type DB = BetterSQLite3Database<typeof schema>;
 
+// Match SQLite's datetime('now') format so text-ordered columns sort correctly.
+function toDbDate(date: Date): string {
+  return date.toISOString().slice(0, 19).replace("T", " ");
+}
+
 export async function applyPriceDropCore(
   db: DB,
   itemId: number,
@@ -17,11 +22,11 @@ export async function applyPriceDropCore(
   if (target == null) return null;
   await db
     .update(items)
-    .set({ askingPrice: target, updatedAt: now.toISOString() })
+    .set({ askingPrice: target, updatedAt: toDbDate(now) })
     .where(eq(items.id, itemId));
   await db
     .insert(priceHistory)
-    .values({ itemId, askingPrice: target, changedAt: now.toISOString() });
+    .values({ itemId, askingPrice: target, changedAt: toDbDate(now) });
   return target;
 }
 
@@ -35,7 +40,7 @@ export async function confirmListingUpdatedCore(
   const [item] = await db.select().from(items).where(eq(items.id, listing.itemId));
   await db
     .update(listings)
-    .set({ listedPrice: item?.askingPrice ?? listing.listedPrice, renewedAt: now.toISOString() })
+    .set({ listedPrice: item?.askingPrice ?? listing.listedPrice, renewedAt: toDbDate(now) })
     .where(eq(listings.id, listingId));
 }
 

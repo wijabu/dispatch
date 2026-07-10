@@ -55,7 +55,7 @@ describe("confirmListingUpdatedCore", () => {
     await confirmListingUpdatedCore(db, listing.id, NOW);
     const [after] = await db.select().from(listings).where(eq(listings.id, listing.id));
     expect(after.listedPrice).toBe(6800); // asking unchanged in this test
-    expect(after.renewedAt).toBe("2026-07-10T12:00:00.000Z");
+    expect(after.renewedAt).toBe("2026-07-10 12:00:00");
   });
 
   it("picks up a changed asking price", async () => {
