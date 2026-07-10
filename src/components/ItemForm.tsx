@@ -177,6 +177,48 @@ export function ItemForm({
         </div>
 
         <div className="sm:col-span-2">
+          <span className={labelClass}>
+            Price drops
+            <span className="ml-2 font-normal text-zinc-500">
+              (optional — leave blank for no automatic drop suggestions)
+            </span>
+          </span>
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <input
+              name="dropAmount"
+              type="number"
+              step="1"
+              min="0"
+              placeholder="$"
+              defaultValue={item?.dropAmount ?? ""}
+              className={`${inputClass} w-24`}
+            />
+            <span className="text-zinc-500">or</span>
+            <input
+              name="dropPercent"
+              type="number"
+              step="0.5"
+              min="0"
+              max="99"
+              placeholder="%"
+              defaultValue={item?.dropPercent ?? ""}
+              className={`${inputClass} w-24`}
+            />
+            <span className="text-zinc-500">every</span>
+            <input
+              name="dropIntervalDays"
+              type="number"
+              step="1"
+              min="1"
+              placeholder="7"
+              defaultValue={item?.dropIntervalDays ?? ""}
+              className={`${inputClass} w-20`}
+            />
+            <span className="text-zinc-500">days — never below your minimum price</span>
+          </div>
+        </div>
+
+        <div className="sm:col-span-2">
           <label className={labelClass} htmlFor="notes">
             Notes (private)
           </label>

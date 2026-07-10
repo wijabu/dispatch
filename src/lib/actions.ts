@@ -58,6 +58,12 @@ function itemFieldsFromForm(formData: FormData) {
     notes: String(formData.get("notes") ?? ""),
     attributes: parseAttributes(formData),
     acquiredAt: String(formData.get("acquiredAt") ?? "") || null,
+    dropAmount: parsePrice(formData.get("dropAmount")),
+    dropPercent: parsePrice(formData.get("dropPercent")),
+    dropIntervalDays: (() => {
+      const n = Number(String(formData.get("dropIntervalDays") ?? "").trim());
+      return Number.isInteger(n) && n > 0 ? n : null;
+    })(),
   };
 }
 
@@ -94,6 +100,9 @@ async function savePhotos(itemId: number, formData: FormData) {
 export async function createItem(formData: FormData) {
   const fields = itemFieldsFromForm(formData);
   if (!fields.name) throw new Error("Name is required");
+  if (fields.dropAmount != null && fields.dropPercent != null) {
+    throw new Error("Set either a dollar or percent drop, not both");
+  }
 
   const [item] = await db.insert(items).values(fields).returning();
 
@@ -112,6 +121,9 @@ export async function createItem(formData: FormData) {
 export async function updateItem(itemId: number, formData: FormData) {
   const fields = itemFieldsFromForm(formData);
   if (!fields.name) throw new Error("Name is required");
+  if (fields.dropAmount != null && fields.dropPercent != null) {
+    throw new Error("Set either a dollar or percent drop, not both");
+  }
 
   const [before] = await db
     .select()
