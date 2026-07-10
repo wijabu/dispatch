@@ -4,6 +4,7 @@ import { commonWarnings, conditionLabel, formatUsd, specLines } from "./helpers"
 export const redditWatchexchange: Publisher = {
   id: "reddit-watchexchange",
   name: "Reddit r/Watchexchange",
+  relistPolicy: { method: "repost", intervalDays: 7, minIntervalDays: 7 },
   generate(item, photos) {
     const price = formatUsd(item.askingPrice);
     const titleParts = [`[WTS] ${item.name}`];

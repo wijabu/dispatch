@@ -7,6 +7,7 @@ const PHOTO_LIMIT = 12;
 export const offerup: Publisher = {
   id: "offerup",
   name: "OfferUp",
+  relistPolicy: { method: "delete-repost", intervalDays: 7, minIntervalDays: 0 },
   generate(item, photos) {
     const warnings = commonWarnings(item, photos);
     if (item.name.length > TITLE_LIMIT) {

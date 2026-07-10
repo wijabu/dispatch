@@ -6,6 +6,7 @@ const TITLE_LIMIT = 99;
 export const facebookMarketplace: Publisher = {
   id: "facebook",
   name: "Facebook Marketplace",
+  relistPolicy: { method: "renew-then-repost", intervalDays: 7, minIntervalDays: 7, freshRelistAfterDays: 42 },
   generate(item, photos) {
     const warnings = commonWarnings(item, photos);
     if (item.name.length > TITLE_LIMIT) {

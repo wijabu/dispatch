@@ -4,6 +4,7 @@ import { commonWarnings, conditionLabel, formatUsd, specLines } from "./helpers"
 export const watchuseek: Publisher = {
   id: "watchuseek",
   name: "Watchuseek",
+  relistPolicy: { method: "bump", intervalDays: 7, minIntervalDays: 7 },
   generate(item, photos) {
     const price = formatUsd(item.askingPrice);
     const specs = specLines(item);

@@ -5,7 +5,7 @@ import { craigslist } from "./craigslist";
 import { redditWatchexchange } from "./reddit-watchexchange";
 import { watchuseek } from "./watchuseek";
 
-export type { Publisher, GeneratedListing } from "./types";
+export type { Publisher, GeneratedListing, RelistPolicy } from "./types";
 
 export const publishers: Publisher[] = [
   offerup,
