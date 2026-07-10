@@ -53,7 +53,7 @@ interface GeneratedListing {
 Publishers are **pure functions of item data** — no DB access, no side effects. Deterministic, unit-testable, git-versioned. In v1.2 this interface gains optional `publish()`/`relist()` methods for Playwright automation; the shape is chosen so that requires no restructuring.
 
 ### Listing tracking (the ledger)
-Each channel card on an item's Publish tab has a **Mark listed** action recording publisher + listed price + date + optional URL into the `listings` table. Channels already listed show status and a **Mark ended** action instead. The dashboard answers "what's listed where, at what price, since when."
+Each channel card on an item's Publish tab has a **Mark listed** action recording publisher + listed price + date + optional URL into the `listings` table. Listed price defaults to the item's current asking price and is editable at mark time. Channels already listed show status and a **Mark ended** action instead. The dashboard answers "what's listed where, at what price, since when."
 
 ## Data model
 
