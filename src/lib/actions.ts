@@ -3,6 +3,7 @@
 import { db, PHOTOS_DIR } from "@/db";
 import {
   items,
+  listings,
   photos,
   priceHistory,
   type Condition,
@@ -182,4 +183,40 @@ export async function deletePhoto(photoId: number, itemId: number) {
     await db.delete(photos).where(eq(photos.id, photoId));
   }
   revalidatePath(`/items/${itemId}`);
+}
+
+export async function markListed(formData: FormData) {
+  const itemId = Number(formData.get("itemId"));
+  const publisherId = String(formData.get("publisherId") ?? "");
+  if (!itemId || !publisherId) throw new Error("itemId and publisherId are required");
+
+  await db.insert(listings).values({
+    itemId,
+    publisher: publisherId,
+    listedPrice: parsePrice(formData.get("listedPrice")),
+    url: String(formData.get("url") ?? "").trim() || null,
+  });
+  await db
+    .update(items)
+    .set({ status: "published", updatedAt: sql`(datetime('now'))` })
+    .where(eq(items.id, itemId));
+
+  revalidatePath("/");
+  revalidatePath(`/items/${itemId}`);
+  revalidatePath(`/items/${itemId}/publish`);
+}
+
+export async function markListingEnded(formData: FormData) {
+  const listingId = Number(formData.get("listingId"));
+  const itemId = Number(formData.get("itemId"));
+  if (!listingId) throw new Error("listingId is required");
+
+  await db
+    .update(listings)
+    .set({ status: "ended", endedAt: sql`(datetime('now'))` })
+    .where(eq(listings.id, listingId));
+
+  revalidatePath("/");
+  revalidatePath(`/items/${itemId}`);
+  revalidatePath(`/items/${itemId}/publish`);
 }
