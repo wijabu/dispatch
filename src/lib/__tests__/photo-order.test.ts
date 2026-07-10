@@ -6,7 +6,7 @@ import { asc, eq } from "drizzle-orm";
 import path from "path";
 import * as schema from "@/db/schema";
 import { items, photos } from "@/db/schema";
-import { setPrimaryPhoto } from "../photo-order";
+import { setPhotoOrder, setPrimaryPhoto } from "../photo-order";
 
 let db: BetterSQLite3Database<typeof schema>;
 
@@ -50,6 +50,36 @@ describe("setPrimaryPhoto", () => {
     await setPrimaryPhoto(db, b.id, b.itemId);
 
     expect(await orderedPaths(b.itemId)).toEqual(["b.jpg", "c.jpg", "a.jpg"]);
+  });
+
+  it("setPhotoOrder applies the given sequence as the new order", async () => {
+    const rows = await db.select().from(photos).orderBy(asc(photos.sortOrder));
+    const byPath = Object.fromEntries(rows.map((r) => [r.path, r]));
+
+    await setPhotoOrder(db, rows[0].itemId, [
+      byPath["b.jpg"].id,
+      byPath["c.jpg"].id,
+      byPath["a.jpg"].id,
+    ]);
+
+    expect(await orderedPaths(rows[0].itemId)).toEqual(["b.jpg", "c.jpg", "a.jpg"]);
+  });
+
+  it("setPhotoOrder ignores ids that belong to a different item", async () => {
+    const [otherItem] = await db.insert(items).values({ name: "Watch" }).returning();
+    await db.insert(photos).values({ itemId: otherItem.id, path: "w.jpg", sortOrder: 5 });
+    const [w] = await db.select().from(photos).where(eq(photos.path, "w.jpg"));
+    const rows = await db
+      .select()
+      .from(photos)
+      .where(eq(photos.path, "a.jpg"));
+    const deskItemId = rows[0].itemId;
+
+    // attacker-ish input: w belongs to Watch, not Desk
+    await setPhotoOrder(db, deskItemId, [w.id]);
+
+    const [wAfter] = await db.select().from(photos).where(eq(photos.id, w.id));
+    expect(wAfter.sortOrder).toBe(5);
   });
 
   it("ignores a photoId that belongs to a different item", async () => {

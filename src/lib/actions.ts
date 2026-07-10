@@ -15,7 +15,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { convertHeicToJpeg, isHeic } from "@/lib/photo-convert";
-import { setPrimaryPhoto } from "@/lib/photo-order";
+import { setPhotoOrder, setPrimaryPhoto } from "@/lib/photo-order";
 import crypto from "crypto";
 import path from "path";
 import fs from "fs/promises";
@@ -193,6 +193,13 @@ export async function deletePhoto(photoId: number, itemId: number) {
 
 export async function makePrimaryPhoto(photoId: number, itemId: number) {
   await setPrimaryPhoto(db, photoId, itemId);
+  revalidatePath("/");
+  revalidatePath(`/items/${itemId}`);
+  revalidatePath(`/items/${itemId}/edit`);
+}
+
+export async function reorderPhotos(itemId: number, orderedIds: number[]) {
+  await setPhotoOrder(db, itemId, orderedIds);
   revalidatePath("/");
   revalidatePath(`/items/${itemId}`);
   revalidatePath(`/items/${itemId}/edit`);
