@@ -5,6 +5,7 @@ import { publishers } from "@/publishers";
 import { ChannelCard } from "@/components/ChannelCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { describeRelistPolicy } from "@/lib/format";
+import { AUTOFILL_CHANNELS, buildStagedBundle } from "@/config/staging";
 
 export default async function PublishPage({
   params,
@@ -48,6 +49,11 @@ export default async function PublishPage({
               itemId={item.id}
               defaultPrice={item.askingPrice}
               policyLabel={describeRelistPolicy(pub.relistPolicy)}
+              autoFill={AUTOFILL_CHANNELS[pub.id] ?? false}
+              stageTier={
+                pub.id === "facebook" ? "facebook" : pub.id === "reddit-watchexchange" ? "reddit" : null
+              }
+              stagedBundle={buildStagedBundle(generated)}
             />
           );
         })}

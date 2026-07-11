@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import type { GeneratedListing } from "@/publishers/types";
 import type { Listing } from "@/db/schema";
 import { markListed, markListingEnded } from "@/lib/actions";
 import { formatDate, formatPrice } from "@/lib/format";
+import { openAndPrefill, stageForFacebook } from "@/lib/automation-actions";
+import type { FillResult } from "@/automation/types";
+import { STAGING } from "@/config/staging";
 
 function CopyButton({ label, text }: { label: string; text: string }) {
   const [copied, setCopied] = useState(false);
@@ -31,6 +34,9 @@ export function ChannelCard({
   itemId,
   defaultPrice,
   policyLabel,
+  autoFill,
+  stageTier,
+  stagedBundle,
 }: {
   publisherId: string;
   publisherName: string;
@@ -39,8 +45,27 @@ export function ChannelCard({
   itemId: number;
   defaultPrice: number | null;
   policyLabel: string;
+  autoFill: boolean; // Tier 1 available for this channel
+  stageTier: "facebook" | "reddit" | null;
+  stagedBundle: string; // paste-ready text for staged handoff
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [isPending, startTransition] = useTransition();
+  const [fillResult, setFillResult] = useState<FillResult | null>(null);
+  const [stageNote, setStageNote] = useState<string | null>(null);
+
+  function fillStatusLine(r: FillResult): string {
+    switch (r.status) {
+      case "ready":
+        return "✅ Ready — review the window and submit, then Mark listed.";
+      case "login_required":
+        return "🔐 Log in in the open window, then hit Pre-fill again.";
+      case "partial":
+        return `⚠️ Filled ${r.filled.join(", ")}; ${r.failedAt} failed — finish that part by hand.`;
+      case "failed":
+        return `❌ Auto-fill failed (${r.reason}) — window is open; use the copy buttons.`;
+    }
+  }
 
   return (
     <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
@@ -59,6 +84,49 @@ export function ChannelCard({
         <div className="flex gap-1.5">
           <CopyButton label="Copy title" text={generated.title} />
           <CopyButton label="Copy body" text={generated.body} />
+          {autoFill && (
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() =>
+                startTransition(async () => {
+                  setFillResult(null);
+                  setFillResult(await openAndPrefill(itemId, publisherId));
+                })
+              }
+              className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isPending ? "Filling…" : "Open & pre-fill"}
+            </button>
+          )}
+          {stageTier === "facebook" && (
+            <button
+              type="button"
+              onClick={async () => {
+                await navigator.clipboard.writeText(stagedBundle).catch(() => {});
+                const { stagedPhotos } = await stageForFacebook(itemId);
+                setStageNote(
+                  `📋 Listing text copied. Firefox is opening; drag the ${stagedPhotos} photo${stagedPhotos === 1 ? "" : "s"} from the Finder window.`
+                );
+              }}
+              className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700"
+            >
+              Stage for Facebook
+            </button>
+          )}
+          {stageTier === "reddit" && (
+            <button
+              type="button"
+              onClick={async () => {
+                await navigator.clipboard.writeText(stagedBundle).catch(() => {});
+                window.open(STAGING.redditSubmitUrl, "_blank");
+                setStageNote("📋 Title + body copied. Paste into the submit page; host photos yourself for now.");
+              }}
+              className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700"
+            >
+              Stage for Reddit
+            </button>
+          )}
         </div>
       </div>
 
@@ -90,6 +158,13 @@ export function ChannelCard({
             <li key={warning}>⚠ {warning}</li>
           ))}
         </ul>
+      )}
+
+      {fillResult && (
+        <div className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">{fillStatusLine(fillResult)}</div>
+      )}
+      {stageNote && (
+        <div className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">{stageNote}</div>
       )}
 
       <div className="mt-3 border-t border-zinc-100 pt-3 dark:border-zinc-800">
