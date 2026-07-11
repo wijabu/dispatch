@@ -41,3 +41,6 @@ yarn-error.log*
 next-env.d.ts
 data/
 .superpowers/
+
+# Stray macOS Finder alias (not the real launcher)
+Dispatch.command alias

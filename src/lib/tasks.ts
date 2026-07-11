@@ -27,8 +27,8 @@ export function computeDropTarget(item: Item): number | null {
 
 export type Task =
   | { type: "price_drop"; itemId: number; itemName: string; currentPrice: number; targetPrice: number }
-  | { type: "relist"; itemId: number; itemName: string; listingId: number; publisherId: string; publisherName: string; action: "renew" | "relist"; ageDays: number }
-  | { type: "stale_price"; itemId: number; itemName: string; listingId: number; publisherId: string; publisherName: string; listedPrice: number | null; askingPrice: number }
+  | { type: "relist"; itemId: number; itemName: string; listingId: number; publisherId: string; publisherName: string; listingUrl: string | null; action: "renew" | "relist"; ageDays: number }
+  | { type: "stale_price"; itemId: number; itemName: string; listingId: number; publisherId: string; publisherName: string; listingUrl: string | null; listedPrice: number | null; askingPrice: number }
   | { type: "ready_to_publish"; itemId: number; itemName: string };
 
 export interface TaskInputs {
@@ -100,7 +100,7 @@ export function computeTasks(inputs: TaskInputs): Task[] {
       stale.push({
         type: "stale_price", itemId: item.id, itemName: item.name,
         listingId: listing.id, publisherId: pub.id, publisherName: pub.name,
-        listedPrice: listing.listedPrice, askingPrice: item.askingPrice,
+        listingUrl: listing.url, listedPrice: listing.listedPrice, askingPrice: item.askingPrice,
       });
     }
 
@@ -118,6 +118,7 @@ export function computeTasks(inputs: TaskInputs): Task[] {
       relists.push({
         type: "relist", itemId: item.id, itemName: item.name,
         listingId: listing.id, publisherId: pub.id, publisherName: pub.name,
+        listingUrl: listing.url,
         action: policy.method === "renew-then-repost" && !freshDue ? "renew" : "relist",
         ageDays: anchorAge,
       });

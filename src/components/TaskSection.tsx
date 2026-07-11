@@ -8,6 +8,7 @@ import {
   snoozeItem,
 } from "@/lib/actions";
 import { formatPrice } from "@/lib/format";
+import { OpenListingButton } from "@/components/OpenListingButton";
 
 function SnoozeButton({ itemId }: { itemId: number }) {
   return (
@@ -67,11 +68,19 @@ export function TaskSection({ tasks }: { tasks: Task[] }) {
                     listed at {formatPrice(task.listedPrice)}, asking is now{" "}
                     <strong>{formatPrice(task.askingPrice)}</strong>
                   </span>
-                  <form action={confirmListingPriceUpdated.bind(null, task.listingId, task.itemId)}>
-                    <button className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
-                      ✓ I updated it
-                    </button>
-                  </form>
+                  <span className="flex gap-1.5">
+                    {task.publisherId === "facebook" && task.listingUrl && (
+                      <OpenListingButton
+                        url={task.listingUrl}
+                        copyText={String(task.askingPrice)}
+                      />
+                    )}
+                    <form action={confirmListingPriceUpdated.bind(null, task.listingId, task.itemId)}>
+                      <button className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
+                        ✓ I updated it
+                      </button>
+                    </form>
+                  </span>
                 </TaskRow>
               );
             case "relist":
@@ -87,6 +96,9 @@ export function TaskSection({ tasks }: { tasks: Task[] }) {
                     </span>
                   </span>
                   <span className="flex gap-1.5">
+                    {task.publisherId === "facebook" && task.listingUrl && (
+                      <OpenListingButton url={task.listingUrl} />
+                    )}
                     {task.action === "renew" ? (
                       <form action={confirmListingRenewed.bind(null, task.listingId, task.itemId)}>
                         <button className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">

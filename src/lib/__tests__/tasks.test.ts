@@ -156,7 +156,7 @@ describe("computeTasks — relist", () => {
     );
     expect(tasks).toContainEqual({
       type: "relist", itemId: 1, itemName: item.name, listingId: 1,
-      publisherId: "offerup", publisherName: "OfferUp", action: "relist", ageDays: 9,
+      publisherId: "offerup", publisherName: "OfferUp", listingUrl: null, action: "relist", ageDays: 9,
     });
   });
 
@@ -224,7 +224,7 @@ describe("computeTasks — relist", () => {
     const tasks = computeTasks(inputs({ items: [item], activeListings: [listing] }));
     expect(tasks).toContainEqual({
       type: "relist", itemId: 1, itemName: item.name, listingId: 1,
-      publisherId: "offerup", publisherName: "OfferUp", action: "relist", ageDays: 9,
+      publisherId: "offerup", publisherName: "OfferUp", listingUrl: null, action: "relist", ageDays: 9,
     });
   });
 
@@ -249,8 +249,23 @@ describe("computeTasks — stale_price", () => {
     const tasks = computeTasks(inputs({ items: [item], activeListings: [listing] }));
     expect(tasks).toContainEqual({
       type: "stale_price", itemId: 1, itemName: item.name, listingId: 1,
-      publisherId: "offerup", publisherName: "OfferUp", listedPrice: 6800, askingPrice: 6596,
+      publisherId: "offerup", publisherName: "OfferUp", listingUrl: null, listedPrice: 6800, askingPrice: 6596,
     });
+  });
+
+  it("passes the listing url through on stale_price and relist tasks", () => {
+    const item = makeItem({ id: 1, status: "published", askingPrice: 6596 });
+    const listing = makeListing({
+      listedPrice: 6800,
+      listedAt: "2026-07-01 12:00:00",
+      url: "https://facebook.com/marketplace/item/123",
+      publisher: "facebook",
+    });
+    const tasks = computeTasks(inputs({ items: [item], activeListings: [listing] }));
+    const stale = tasks.find((t) => t.type === "stale_price");
+    const relist = tasks.find((t) => t.type === "relist");
+    expect(stale).toMatchObject({ listingUrl: "https://facebook.com/marketplace/item/123" });
+    expect(relist).toMatchObject({ listingUrl: "https://facebook.com/marketplace/item/123" });
   });
 
   it("null listedPrice counts as stale when asking exists", () => {
