@@ -14,7 +14,7 @@ export const STAGING = {
   facebookCreateUrl: "https://www.facebook.com/marketplace/create/item",
   redditSubmitUrl: "https://www.reddit.com/r/Watchexchange/submit",
   // Craigslist posting form requires a postal code; set yours once.
-  craigslistPostal: "",
+  craigslistPostal: "32779",
   // Item category -> Craigslist category label text (matched on the category page).
   craigslistCategoryMap: {
     watches: "jewelry - by owner",
