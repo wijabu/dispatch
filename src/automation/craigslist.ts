@@ -51,11 +51,22 @@ export const craigslistFill: FillScript = {
         page
           .locator('button:has-text("continue"), button[type="submit"], input[name="go"]')
           .first();
-      const catText = () =>
-        page
-          .getByText(craigslistCategory(ctx.item.category), { exact: true })
-          .first();
+      const category = craigslistCategory(ctx.item.category);
       const titleSel = "#PostingTitle, input[name='PostingTitle']";
+
+      // Select a category radio reliably: prefer the radio's accessible name
+      // (.check() is the proper API and never races), fall back to clicking
+      // the label text. Retry once — CL's wizard is timing-flaky.
+      const selectCategory = async () => {
+        const byRole = page.getByRole("radio", { name: category, exact: true });
+        if (await byRole.count()) {
+          await byRole.check({ timeout: 8000 });
+        } else {
+          await page.getByText(category, { exact: true }).first().click({ timeout: 8000 });
+        }
+        await continueBtn().click({ timeout: 8000 }).catch(() => {});
+        await page.waitForSelector(titleSel, { timeout: 12000 });
+      };
 
       // Type page: "for sale by owner" (some flows land straight on categories).
       const fso = page.getByText("for sale by owner", { exact: true }).first();
@@ -64,14 +75,14 @@ export const craigslistFill: FillScript = {
         await continueBtn().click({ timeout: 8000 }).catch(() => {});
       }
 
-      // Wait until the category page is actually up before selecting — prevents
-      // a stray continue click from submitting the empty details form.
-      // Bare labels ("furniture", "general for sale"), exact match.
-      await catText().waitFor({ timeout: 12000 });
-      await catText().click({ timeout: 8000 });
-      await continueBtn().click({ timeout: 8000 }).catch(() => {});
-
-      await page.waitForSelector(titleSel, { timeout: 15000 });
+      // Wait for the category page, then select + advance (one retry on flake).
+      await page.getByText(category, { exact: true }).first().waitFor({ timeout: 12000 });
+      try {
+        await selectCategory();
+      } catch {
+        if (await page.locator(titleSel).count()) return; // already advanced
+        await selectCategory();
+      }
     });
 
     if (navigated) {
