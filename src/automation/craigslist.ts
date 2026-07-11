@@ -54,16 +54,32 @@ export const craigslistFill: FillScript = {
       const category = craigslistCategory(ctx.item.category);
       const titleSel = "#PostingTitle, input[name='PostingTitle']";
 
-      // Select a category radio reliably: prefer the radio's accessible name
-      // (.check() is the proper API and never races), fall back to clicking
-      // the label text. Retry once — CL's wizard is timing-flaky.
+      // Select a category radio reliably. CL's category page is a list of
+      // radios with adjacent text labels that aren't always properly
+      // associated, so clicking the text races the continue click. Strategy:
+      //   1) radio by accessible name (.check() — proper API, no race)
+      //   2) the radio in the same row/label as the exact category text
+      //   3) last resort: click the text
+      // Then WAIT until a radio is actually checked before advancing.
+      const catRe = new RegExp(`^\\s*${category}\\s*$`, "i");
       const selectCategory = async () => {
         const byRole = page.getByRole("radio", { name: category, exact: true });
         if (await byRole.count()) {
           await byRole.check({ timeout: 8000 });
         } else {
-          await page.getByText(category, { exact: true }).first().click({ timeout: 8000 });
+          const row = page
+            .locator("li, label")
+            .filter({ has: page.locator('input[type="radio"]') })
+            .filter({ hasText: catRe })
+            .first();
+          if (await row.count()) {
+            await row.locator('input[type="radio"]').check({ timeout: 8000 });
+          } else {
+            await page.getByText(category, { exact: true }).first().click({ timeout: 8000 });
+          }
         }
+        // Only advance once a radio is genuinely selected.
+        await page.locator('input[type="radio"]:checked').first().waitFor({ timeout: 5000 });
         await continueBtn().click({ timeout: 8000 }).catch(() => {});
         await page.waitForSelector(titleSel, { timeout: 12000 });
       };
