@@ -54,16 +54,32 @@ export const craigslistFill: FillScript = {
       const category = craigslistCategory(ctx.item.category);
       const titleSel = "#PostingTitle, input[name='PostingTitle']";
 
-      // Select the category radio by walking the DOM in-page: for each radio,
-      // derive its label text (label[for], wrapping label, sibling text, or
-      // parent text) and click the one whose text matches. This is structure-
-      // agnostic — it doesn't assume CL wraps radios in <label> or <li>, which
-      // is where the locator-based attempts kept missing. Returns true if a
-      // radio was selected.
+      const catContainer = ".radio-option-container";
+
+      // Select the category by clicking its LABEL. CL's newer json-form tracks
+      // selection in JS state, so clicking the raw <input> sets DOM `checked`
+      // but the framework ignores it on submit — clicking the <label> is what
+      // it listens to. Walk the real markup (<label class="radio-option"> with
+      // a <span class="option-label"> text), falling back to any label/radio
+      // whose text matches (classic form). Returns true if something was
+      // clicked.
       const selectCategory = async (): Promise<boolean> => {
         const picked = await page.evaluate((want) => {
           const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
           const target = norm(want);
+          // New json-form: label.radio-option > input + div > span.option-label
+          const labels = Array.from(
+            document.querySelectorAll<HTMLLabelElement>("label.radio-option, label")
+          );
+          for (const lab of labels) {
+            const span = lab.querySelector(".option-label") ?? lab;
+            if (norm(span.textContent ?? "") === target) {
+              lab.querySelector<HTMLInputElement>('input[type="radio"]')?.click();
+              lab.click();
+              return true;
+            }
+          }
+          // Classic fallback: derive each radio's label text.
           const radios = Array.from(
             document.querySelectorAll<HTMLInputElement>('input[type="radio"]')
           );
@@ -72,15 +88,7 @@ export const craigslistFill: FillScript = {
               const l = document.querySelector(`label[for="${CSS.escape(r.id)}"]`);
               if (l?.textContent) return l.textContent;
             }
-            const wrap = r.closest("label");
-            if (wrap?.textContent) return wrap.textContent;
-            let sib: Node | null = r.nextSibling;
-            while (sib) {
-              const txt = sib.textContent ?? "";
-              if (txt.trim()) return txt;
-              sib = sib.nextSibling;
-            }
-            return r.parentElement?.textContent ?? "";
+            return r.closest("label")?.textContent ?? r.parentElement?.textContent ?? "";
           };
           for (const r of radios) {
             if (norm(labelFor(r)) === target) {
@@ -92,10 +100,18 @@ export const craigslistFill: FillScript = {
         }, category);
 
         if (!picked) return false;
-        await page.locator('input[type="radio"]:checked').first().waitFor({ timeout: 5000 });
+
         await continueBtn().click({ timeout: 8000 }).catch(() => {});
-        await page.waitForSelector(titleSel, { timeout: 12000 });
-        return true;
+        // "Advanced" for EITHER form variant: the category list is gone, or a
+        // title field appeared.
+        await Promise.race([
+          page.locator(catContainer).first().waitFor({ state: "detached", timeout: 12000 }),
+          page.waitForSelector(titleSel, { timeout: 12000 }),
+        ]).catch(() => {});
+        return (
+          (await page.locator(titleSel).count()) > 0 ||
+          (await page.locator(catContainer).count()) === 0
+        );
       };
 
       // Type page: "for sale by owner" (some flows land straight on categories).
@@ -113,7 +129,7 @@ export const craigslistFill: FillScript = {
       if (!(await selectCategory())) {
         if (await page.locator(titleSel).count()) return; // already advanced
         if (!(await selectCategory())) {
-          throw new Error(`could not select category "${category}"`);
+          throw new Error(`could not advance past category "${category}"`);
         }
       }
     });
