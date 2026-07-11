@@ -10,17 +10,25 @@ export async function fillCraigslistForm(
   t: StepTracker,
   opts: { postal: string }
 ): Promise<void> {
-  await tryStep(t, "title", () => page.fill("#PostingTitle", ctx.listing.title));
+  // id first (fixture + legacy), then current name-based selector.
+  await tryStep(t, "title", () =>
+    page.fill("#PostingTitle, input[name='PostingTitle']", ctx.listing.title)
+  );
   await tryStep(t, "price", () =>
-    page.fill("#Ask", String(ctx.item.askingPrice ?? ""))
+    page.fill("#Ask, input[name='price']", String(ctx.item.askingPrice ?? ""))
   );
   if (opts.postal) {
-    await tryStep(t, "postal code", () => page.fill("#postal_code", opts.postal));
+    await tryStep(t, "postal code", () =>
+      page.fill("#postal_code, input[name='postal']", opts.postal)
+    );
   }
   await tryStep(t, "description", () =>
-    page.fill("#PostingBody", ctx.listing.body)
+    page.fill("#PostingBody, textarea[name='PostingBody']", ctx.listing.body)
   );
-  if (ctx.photoPaths.length > 0) {
+  // Photos live on a later Craigslist page; only upload if a file input is on
+  // THIS page (true for the fixture, not for the real details form). Skipping
+  // when absent keeps it out of the failure list.
+  if (ctx.photoPaths.length > 0 && (await page.locator('input[type="file"]').count()) > 0) {
     await tryStep(t, "photos", () =>
       page.setInputFiles('input[type="file"]', ctx.photoPaths)
     );
@@ -62,17 +70,12 @@ export const craigslistFill: FillScript = {
     });
 
     if (navigated) {
+      // Fill the details-page text fields and stop. We do NOT click continue/
+      // submit — that would violate "Dispatch never submits" and trip CL's
+      // validation. You pick condition, add photos on the next page, and post.
       await fillCraigslistForm(page, ctx, t, {
         postal: STAGING.craigslistPostal,
       });
-      // CL uploads images on the page after the form; try to advance and upload.
-      if (ctx.photoPaths.length > 0 && !t.filled.includes("photos")) {
-        await tryStep(t, "photos", async () => {
-          await page.locator('button[type="submit"]').first().click({ timeout: 8000 });
-          await page.waitForSelector('input[type="file"]', { timeout: 10000 });
-          await page.setInputFiles('input[type="file"]', ctx.photoPaths);
-        });
-      }
     }
 
     return resolveResult(t);
