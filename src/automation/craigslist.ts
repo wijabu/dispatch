@@ -54,34 +54,48 @@ export const craigslistFill: FillScript = {
       const category = craigslistCategory(ctx.item.category);
       const titleSel = "#PostingTitle, input[name='PostingTitle']";
 
-      // Select a category radio reliably. CL's category page is a list of
-      // radios with adjacent text labels that aren't always properly
-      // associated, so clicking the text races the continue click. Strategy:
-      //   1) radio by accessible name (.check() — proper API, no race)
-      //   2) the radio in the same row/label as the exact category text
-      //   3) last resort: click the text
-      // Then WAIT until a radio is actually checked before advancing.
-      const catRe = new RegExp(`^\\s*${category}\\s*$`, "i");
-      const selectCategory = async () => {
-        const byRole = page.getByRole("radio", { name: category, exact: true });
-        if (await byRole.count()) {
-          await byRole.check({ timeout: 8000 });
-        } else {
-          const row = page
-            .locator("li, label")
-            .filter({ has: page.locator('input[type="radio"]') })
-            .filter({ hasText: catRe })
-            .first();
-          if (await row.count()) {
-            await row.locator('input[type="radio"]').check({ timeout: 8000 });
-          } else {
-            await page.getByText(category, { exact: true }).first().click({ timeout: 8000 });
+      // Select the category radio by walking the DOM in-page: for each radio,
+      // derive its label text (label[for], wrapping label, sibling text, or
+      // parent text) and click the one whose text matches. This is structure-
+      // agnostic — it doesn't assume CL wraps radios in <label> or <li>, which
+      // is where the locator-based attempts kept missing. Returns true if a
+      // radio was selected.
+      const selectCategory = async (): Promise<boolean> => {
+        const picked = await page.evaluate((want) => {
+          const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+          const target = norm(want);
+          const radios = Array.from(
+            document.querySelectorAll<HTMLInputElement>('input[type="radio"]')
+          );
+          const labelFor = (r: HTMLInputElement): string => {
+            if (r.id) {
+              const l = document.querySelector(`label[for="${CSS.escape(r.id)}"]`);
+              if (l?.textContent) return l.textContent;
+            }
+            const wrap = r.closest("label");
+            if (wrap?.textContent) return wrap.textContent;
+            let sib: Node | null = r.nextSibling;
+            while (sib) {
+              const txt = sib.textContent ?? "";
+              if (txt.trim()) return txt;
+              sib = sib.nextSibling;
+            }
+            return r.parentElement?.textContent ?? "";
+          };
+          for (const r of radios) {
+            if (norm(labelFor(r)) === target) {
+              r.click();
+              return true;
+            }
           }
-        }
-        // Only advance once a radio is genuinely selected.
+          return false;
+        }, category);
+
+        if (!picked) return false;
         await page.locator('input[type="radio"]:checked').first().waitFor({ timeout: 5000 });
         await continueBtn().click({ timeout: 8000 }).catch(() => {});
         await page.waitForSelector(titleSel, { timeout: 12000 });
+        return true;
       };
 
       // Type page: "for sale by owner" (some flows land straight on categories).
@@ -92,12 +106,15 @@ export const craigslistFill: FillScript = {
       }
 
       // Wait for the category page, then select + advance (one retry on flake).
-      await page.getByText(category, { exact: true }).first().waitFor({ timeout: 12000 });
-      try {
-        await selectCategory();
-      } catch {
+      await page
+        .getByText(category, { exact: true })
+        .first()
+        .waitFor({ timeout: 12000 });
+      if (!(await selectCategory())) {
         if (await page.locator(titleSel).count()) return; // already advanced
-        await selectCategory();
+        if (!(await selectCategory())) {
+          throw new Error(`could not select category "${category}"`);
+        }
       }
     });
 
