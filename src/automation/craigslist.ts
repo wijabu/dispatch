@@ -39,25 +39,26 @@ export const craigslistFill: FillScript = {
     // Selectors here are best-effort; live acceptance tunes them. Any failure
     // records and continues — the window stays open wherever we got to.
     const navigated = await tryStep(t, "navigate to form", async () => {
-      // Type page: "for sale by owner"
-      const fso = page.locator("label", { hasText: "for sale by owner" }).first();
-      await fso.click({ timeout: 8000 });
-      await page
-        .locator('button[type="submit"], input[name="go"]')
-        .first()
-        .click({ timeout: 8000 })
-        .catch(() => {}); // some regions auto-advance on radio click
-      // Category page
+      const continueBtn = () =>
+        page
+          .locator('button:has-text("continue"), button[type="submit"], input[name="go"]')
+          .first();
+
+      // Type page: "for sale by owner". Some flows skip straight to categories.
+      const fso = page.getByText("for sale by owner", { exact: true }).first();
+      if (await fso.count()) {
+        await fso.click({ timeout: 8000 });
+        await continueBtn().click({ timeout: 8000 }).catch(() => {}); // some regions auto-advance
+      }
+
+      // Category page: bare labels ("furniture", "general for sale") — exact
+      // match so "electronics" can't collide with "computer parts" etc.
       const cat = page
-        .locator("label", { hasText: craigslistCategory(ctx.item.category) })
+        .getByText(craigslistCategory(ctx.item.category), { exact: true })
         .first();
       await cat.click({ timeout: 8000 });
-      await page
-        .locator('button[type="submit"], input[name="go"]')
-        .first()
-        .click({ timeout: 8000 })
-        .catch(() => {});
-      await page.waitForSelector("#PostingTitle", { timeout: 10000 });
+      await continueBtn().click({ timeout: 8000 }).catch(() => {});
+      await page.waitForSelector("#PostingTitle", { timeout: 15000 });
     });
 
     if (navigated) {

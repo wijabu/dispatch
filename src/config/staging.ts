@@ -15,12 +15,13 @@ export const STAGING = {
   redditSubmitUrl: "https://www.reddit.com/r/Watchexchange/submit",
   // Craigslist posting form requires a postal code; set yours once.
   craigslistPostal: "32779",
-  // Item category -> Craigslist category label text (matched on the category page).
+  // Item category -> Craigslist category label text (matched exactly on the
+  // category page — CL uses bare labels like "furniture", "general for sale").
   craigslistCategoryMap: {
-    watches: "jewelry - by owner",
-    furniture: "furniture - by owner",
-    electronics: "electronics - by owner",
-    general: "general for sale - by owner",
+    watches: "jewelry",
+    furniture: "furniture",
+    electronics: "electronics",
+    general: "general for sale",
   } as Record<string, string>,
   watchuseekCreateThreadUrl:
     "https://www.watchuseek.com/forums/watches-private-sellers-and-sponsors.9/create-thread",
