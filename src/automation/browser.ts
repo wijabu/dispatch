@@ -1,13 +1,20 @@
 import { chromium, type BrowserContext } from "playwright";
 import path from "path";
 
-// Singleton persistent context — same pattern as the db singleton.
+// Singleton persistent context + fill lock, stashed on globalThis. Plain
+// module state would reset on every Next dev hot-reload while the real
+// Chromium keeps running — and relaunching launchPersistentContext on the
+// same profile dir throws a profile-lock error, wedging the tool until the
+// orphaned window is closed. globalThis survives module re-evaluation.
 // Headed: the whole point is a window the user reviews and submits in.
-let contextPromise: Promise<BrowserContext> | null = null;
+const g = globalThis as unknown as {
+  __dispatchContext?: Promise<BrowserContext> | null;
+  __dispatchFillInProgress?: boolean;
+};
 
 export function getBrowserContext(): Promise<BrowserContext> {
-  if (!contextPromise) {
-    contextPromise = chromium
+  if (!g.__dispatchContext) {
+    g.__dispatchContext = chromium
       .launchPersistentContext(
         path.join(process.cwd(), "data", "browser-profile"),
         { headless: false, viewport: null }
@@ -15,27 +22,25 @@ export function getBrowserContext(): Promise<BrowserContext> {
       .then((ctx) => {
         // User closed the browser window entirely -> allow relaunch next time.
         ctx.on("close", () => {
-          contextPromise = null;
+          g.__dispatchContext = null;
         });
         return ctx;
       })
       .catch((err) => {
-        contextPromise = null;
+        g.__dispatchContext = null;
         throw err;
       });
   }
-  return contextPromise;
+  return g.__dispatchContext;
 }
 
 // One fill at a time — a simple in-process lock.
-let fillInProgress = false;
-
 export function acquireFillLock(): boolean {
-  if (fillInProgress) return false;
-  fillInProgress = true;
+  if (g.__dispatchFillInProgress) return false;
+  g.__dispatchFillInProgress = true;
   return true;
 }
 
 export function releaseFillLock(): void {
-  fillInProgress = false;
+  g.__dispatchFillInProgress = false;
 }

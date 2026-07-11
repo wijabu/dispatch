@@ -101,27 +101,45 @@ export const craigslistFill: FillScript = {
 
         if (!picked) return false;
 
+        // Only the json-form variant has the category container. Capture its
+        // presence BEFORE advancing so its absence isn't read as "advanced" on
+        // the classic form (where it never exists and count() is always 0).
+        const hadCatContainer = (await page.locator(catContainer).count()) > 0;
+
         await continueBtn().click({ timeout: 8000 }).catch(() => {});
-        // "Advanced" for EITHER form variant: the category list is gone, or a
-        // title field appeared.
-        await Promise.race([
-          page.locator(catContainer).first().waitFor({ state: "detached", timeout: 12000 }),
+        // "Advanced" = the title field appeared, or (json-form only) the
+        // category list detached.
+        const advanced: Promise<unknown>[] = [
           page.waitForSelector(titleSel, { timeout: 12000 }),
-        ]).catch(() => {});
+        ];
+        if (hadCatContainer) {
+          advanced.push(
+            page.locator(catContainer).first().waitFor({ state: "detached", timeout: 12000 })
+          );
+        }
+        await Promise.race(advanced).catch(() => {});
         return (
           (await page.locator(titleSel).count()) > 0 ||
-          (await page.locator(catContainer).count()) === 0
+          (hadCatContainer && (await page.locator(catContainer).count()) === 0)
         );
       };
 
       // Type page: "for sale by owner" (some flows land straight on categories).
+      // CL's json-form renders after `load`, so wait for the page to paint
+      // before inspecting — an instant count() races the hydration and would
+      // skip the type page, stranding the fill. Race the type-page text against
+      // the category text; whichever we actually landed on resolves first.
       const fso = page.getByText("for sale by owner", { exact: true }).first();
+      await Promise.race([
+        fso.waitFor({ timeout: 12000 }),
+        page.getByText(category, { exact: true }).first().waitFor({ timeout: 12000 }),
+      ]).catch(() => {});
       if (await fso.count()) {
         await fso.click({ timeout: 8000 });
         await continueBtn().click({ timeout: 8000 }).catch(() => {});
       }
 
-      // Wait for the category page, then select + advance (one retry on flake).
+      // Ensure the category page is present, then select + advance.
       await page
         .getByText(category, { exact: true })
         .first()

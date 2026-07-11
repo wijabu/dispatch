@@ -23,7 +23,7 @@ afterAll(async () => {
 
 describe("craigslist fill core (fixture)", () => {
   it(
-    "fills title, price, postal, body, and uploads photos primary-first",
+    "fills title, price, postal, body, and uploads both photos",
     async () => {
       await page.goto(fixtureUrl("craigslist.html"));
       const item = makeItem({ askingPrice: 6800 });

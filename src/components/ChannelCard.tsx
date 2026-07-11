@@ -69,6 +69,25 @@ export function ChannelCard({
     }
   }
 
+  // Staged-handoff runner: serialize with the auto-fill buttons via isPending
+  // (guards the Facebook photo-staging race on double-click) and surface a
+  // failure note instead of an unhandled rejection. Copies the bundle first
+  // and reports honestly whether the clipboard write actually succeeded.
+  function runStage(after: (copied: boolean, note: (s: string) => void) => Promise<void>) {
+    startTransition(async () => {
+      setFillResult(null);
+      try {
+        const copied = await navigator.clipboard
+          .writeText(stagedBundle)
+          .then(() => true)
+          .catch(() => false);
+        await after(copied, setStageNote);
+      } catch (e) {
+        setStageNote(`❌ Staging failed: ${e instanceof Error ? e.message : "unknown error"}`);
+      }
+    });
+  }
+
   return (
     <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -111,6 +130,7 @@ export function ChannelCard({
                 disabled={isPending}
                 onClick={() =>
                   startTransition(async () => {
+                    setStageNote(null);
                     setFillResult(null);
                     setFillResult(await openAndPrefill(itemId, publisherId));
                   })
@@ -124,14 +144,19 @@ export function ChannelCard({
           {stageTier === "facebook" && (
             <button
               type="button"
-              onClick={async () => {
-                await navigator.clipboard.writeText(stagedBundle).catch(() => {});
-                const { stagedPhotos } = await stageForFacebook(itemId);
-                setStageNote(
-                  `📋 Listing text copied. Firefox is opening; drag the ${stagedPhotos} photo${stagedPhotos === 1 ? "" : "s"} from the Finder window.`
-                );
-              }}
-              className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700"
+              disabled={isPending}
+              onClick={() =>
+                runStage(async (copied, note) => {
+                  const { stagedPhotos } = await stageForFacebook(itemId);
+                  const lead = copied ? "📋 Listing text copied." : "⚠️ Copy failed — use Copy body.";
+                  note(
+                    stagedPhotos === 0
+                      ? `${lead} No photos to stage; Firefox is opening.`
+                      : `${lead} Firefox is opening; drag the ${stagedPhotos} photo${stagedPhotos === 1 ? "" : "s"} from the Finder window.`
+                  );
+                })
+              }
+              className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
               Stage for Facebook
             </button>
@@ -139,12 +164,16 @@ export function ChannelCard({
           {stageTier === "reddit" && (
             <button
               type="button"
-              onClick={async () => {
-                await navigator.clipboard.writeText(stagedBundle).catch(() => {});
-                window.open(STAGING.redditSubmitUrl, "_blank");
-                setStageNote("📋 Title + body copied. Paste into the submit page; host photos yourself for now.");
-              }}
-              className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700"
+              disabled={isPending}
+              onClick={() =>
+                runStage(async (copied, note) => {
+                  window.open(STAGING.redditSubmitUrl, "_blank");
+                  note(
+                    `${copied ? "📋 Title + body copied." : "⚠️ Copy failed — use the copy buttons."} Paste into the submit page; host photos yourself for now.`
+                  );
+                })
+              }
+              className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
               Stage for Reddit
             </button>
@@ -152,12 +181,16 @@ export function ChannelCard({
           {stageTier === "watchuseek" && (
             <button
               type="button"
-              onClick={async () => {
-                await navigator.clipboard.writeText(stagedBundle).catch(() => {});
-                window.open(STAGING.watchuseekCreateThreadUrl, "_blank");
-                setStageNote("📋 Title + body copied. Opening the new-thread page in your browser — log in if needed, paste, and add photos by hand.");
-              }}
-              className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700"
+              disabled={isPending}
+              onClick={() =>
+                runStage(async (copied, note) => {
+                  window.open(STAGING.watchuseekCreateThreadUrl, "_blank");
+                  note(
+                    `${copied ? "📋 Title + body copied." : "⚠️ Copy failed — use the copy buttons."} Opening the new-thread page in your browser — log in if needed, paste, and add photos by hand.`
+                  );
+                })
+              }
+              className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
               Stage for Watchuseek
             </button>
