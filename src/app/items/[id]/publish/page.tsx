@@ -51,9 +51,20 @@ export default async function PublishPage({
               policyLabel={describeRelistPolicy(pub.relistPolicy)}
               autoFill={AUTOFILL_CHANNELS[pub.id] ?? false}
               stageTier={
-                pub.id === "facebook" ? "facebook" : pub.id === "reddit-watchexchange" ? "reddit" : null
+                pub.id === "facebook"
+                  ? "facebook"
+                  : pub.id === "reddit-watchexchange"
+                    ? "reddit"
+                    : pub.id === "watchuseek"
+                      ? "watchuseek"
+                      : null
               }
               stagedBundle={buildStagedBundle(generated)}
+              note={
+                pub.id === "offerup"
+                  ? "OfferUp disabled web posting — it's app-only now. Copy the text above and post from the OfferUp app."
+                  : null
+              }
             />
           );
         })}

@@ -5,7 +5,7 @@ import type { GeneratedListing } from "@/publishers/types";
 import type { Listing } from "@/db/schema";
 import { markListed, markListingEnded } from "@/lib/actions";
 import { formatDate, formatPrice } from "@/lib/format";
-import { openAndPrefill, stageForFacebook } from "@/lib/automation-actions";
+import { openAndPrefill, openForLogin, stageForFacebook } from "@/lib/automation-actions";
 import type { FillResult } from "@/automation/types";
 import { STAGING } from "@/config/staging";
 
@@ -37,6 +37,7 @@ export function ChannelCard({
   autoFill,
   stageTier,
   stagedBundle,
+  note,
 }: {
   publisherId: string;
   publisherName: string;
@@ -46,8 +47,9 @@ export function ChannelCard({
   defaultPrice: number | null;
   policyLabel: string;
   autoFill: boolean; // Tier 1 available for this channel
-  stageTier: "facebook" | "reddit" | null;
+  stageTier: "facebook" | "reddit" | "watchuseek" | null;
   stagedBundle: string; // paste-ready text for staged handoff
+  note?: string | null; // channel-specific hint (e.g. OfferUp is app-only)
 }) {
   const [expanded, setExpanded] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -85,19 +87,39 @@ export function ChannelCard({
           <CopyButton label="Copy title" text={generated.title} />
           <CopyButton label="Copy body" text={generated.body} />
           {autoFill && (
-            <button
-              type="button"
-              disabled={isPending}
-              onClick={() =>
-                startTransition(async () => {
-                  setFillResult(null);
-                  setFillResult(await openAndPrefill(itemId, publisherId));
-                })
-              }
-              className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              {isPending ? "Filling…" : "Open & pre-fill"}
-            </button>
+            <>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() =>
+                  startTransition(async () => {
+                    setFillResult(null);
+                    const r = await openForLogin(publisherId);
+                    setStageNote(
+                      r.ok
+                        ? "🔐 Log in in the Dispatch browser window, then click Open & pre-fill."
+                        : `❌ Couldn't open the login page (${r.reason}).`
+                    );
+                  })
+                }
+                className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs font-medium hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+              >
+                Log in
+              </button>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() =>
+                  startTransition(async () => {
+                    setFillResult(null);
+                    setFillResult(await openAndPrefill(itemId, publisherId));
+                  })
+                }
+                className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {isPending ? "Filling…" : "Open & pre-fill"}
+              </button>
+            </>
           )}
           {stageTier === "facebook" && (
             <button
@@ -125,6 +147,19 @@ export function ChannelCard({
               className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700"
             >
               Stage for Reddit
+            </button>
+          )}
+          {stageTier === "watchuseek" && (
+            <button
+              type="button"
+              onClick={async () => {
+                await navigator.clipboard.writeText(stagedBundle).catch(() => {});
+                window.open(STAGING.watchuseekCreateThreadUrl, "_blank");
+                setStageNote("📋 Title + body copied. Opening the new-thread page in your browser — log in if needed, paste, and add photos by hand.");
+              }}
+              className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700"
+            >
+              Stage for Watchuseek
             </button>
           )}
         </div>
@@ -160,6 +195,9 @@ export function ChannelCard({
         </ul>
       )}
 
+      {note && (
+        <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">ℹ️ {note}</div>
+      )}
       {fillResult && (
         <div className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">{fillStatusLine(fillResult)}</div>
       )}

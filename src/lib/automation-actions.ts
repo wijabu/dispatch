@@ -55,6 +55,26 @@ export async function openAndPrefill(
   }
 }
 
+// Open the channel's login/home page in Dispatch's browser so the user can
+// authenticate once; the session then persists in the profile. Separate from
+// openAndPrefill because the form page itself often won't render a login form
+// when logged out (it just blanks). No fill lock — the user needs time here.
+export async function openForLogin(
+  publisherId: string
+): Promise<{ ok: boolean; reason?: string }> {
+  const script = getFillScript(publisherId);
+  if (!script) return { ok: false, reason: `No fill script for ${publisherId}` };
+  const loginUrl = script.loginUrl ?? new URL(script.startUrl).origin;
+  try {
+    const context = await getBrowserContext();
+    const page = await context.newPage();
+    await page.goto(loginUrl, { timeout: 30000 });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : "Unknown error" };
+  }
+}
+
 export async function stageForFacebook(
   itemId: number
 ): Promise<{ stagedPhotos: number }> {

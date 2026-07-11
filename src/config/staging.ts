@@ -2,10 +2,14 @@ import type { GeneratedListing } from "@/publishers/types";
 
 // Per-channel kill switches for Tier-1 auto-fill. Flip to false if a
 // marketplace ever pushes back; staged handoff / copy-paste remain.
+// Reality after live acceptance (2026-07-11): only Craigslist permits auto-fill.
+//  - watchuseek: Tollbit bot gate blanks the automation browser at the origin
+//    level (even the home page) → lite staged handoff instead.
+//  - offerup: web posting deprecated, mobile-app-only → copy/paste floor.
 export const AUTOFILL_CHANNELS: Record<string, boolean> = {
   craigslist: true,
-  watchuseek: true,
-  offerup: true,
+  watchuseek: false,
+  offerup: false,
 };
 
 export const STAGING = {
@@ -25,6 +29,9 @@ export const STAGING = {
   } as Record<string, string>,
   watchuseekCreateThreadUrl:
     "https://www.watchuseek.com/forums/watches-private-sellers-and-sponsors.9/create-thread",
+  // "Log in" target: the create-thread page shows nothing when logged out, so
+  // send the login flow to the forum home where the log-in bar renders.
+  watchuseekLoginUrl: "https://www.watchuseek.com/",
 };
 
 export function craigslistCategory(itemCategory: string): string {

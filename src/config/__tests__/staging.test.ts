@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import { AUTOFILL_CHANNELS, STAGING, buildStagedBundle } from "../staging";
 
 describe("staging config", () => {
-  it("declares kill switches for exactly the three auto-fill channels", () => {
+  // Live acceptance (2026-07-11): only Craigslist permits auto-fill. Watchuseek
+  // is Tollbit-gated and OfferUp deprecated web posting, so both are switched
+  // off (their fill scripts stay registered in case either reopens).
+  it("enables auto-fill only where the site permits it (Craigslist)", () => {
     expect(AUTOFILL_CHANNELS).toEqual({
       craigslist: true,
-      watchuseek: true,
-      offerup: true,
+      watchuseek: false,
+      offerup: false,
     });
   });
 

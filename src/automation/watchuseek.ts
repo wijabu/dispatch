@@ -24,6 +24,7 @@ export async function fillWatchuseekForm(
 export const watchuseekFill: FillScript = {
   publisherId: "watchuseek",
   startUrl: STAGING.watchuseekCreateThreadUrl,
+  loginUrl: STAGING.watchuseekLoginUrl,
   isLoginWall: looksLikeLoginWall,
 
   async fill(page, ctx): Promise<FillResult> {
