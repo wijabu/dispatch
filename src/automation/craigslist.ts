@@ -51,22 +51,27 @@ export const craigslistFill: FillScript = {
         page
           .locator('button:has-text("continue"), button[type="submit"], input[name="go"]')
           .first();
+      const catText = () =>
+        page
+          .getByText(craigslistCategory(ctx.item.category), { exact: true })
+          .first();
+      const titleSel = "#PostingTitle, input[name='PostingTitle']";
 
-      // Type page: "for sale by owner". Some flows skip straight to categories.
+      // Type page: "for sale by owner" (some flows land straight on categories).
       const fso = page.getByText("for sale by owner", { exact: true }).first();
       if (await fso.count()) {
         await fso.click({ timeout: 8000 });
-        await continueBtn().click({ timeout: 8000 }).catch(() => {}); // some regions auto-advance
+        await continueBtn().click({ timeout: 8000 }).catch(() => {});
       }
 
-      // Category page: bare labels ("furniture", "general for sale") — exact
-      // match so "electronics" can't collide with "computer parts" etc.
-      const cat = page
-        .getByText(craigslistCategory(ctx.item.category), { exact: true })
-        .first();
-      await cat.click({ timeout: 8000 });
+      // Wait until the category page is actually up before selecting — prevents
+      // a stray continue click from submitting the empty details form.
+      // Bare labels ("furniture", "general for sale"), exact match.
+      await catText().waitFor({ timeout: 12000 });
+      await catText().click({ timeout: 8000 });
       await continueBtn().click({ timeout: 8000 }).catch(() => {});
-      await page.waitForSelector("#PostingTitle", { timeout: 15000 });
+
+      await page.waitForSelector(titleSel, { timeout: 15000 });
     });
 
     if (navigated) {
