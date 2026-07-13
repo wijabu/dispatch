@@ -19,24 +19,31 @@ async function bootedFlag(adb: Adb): Promise<boolean> {
 }
 
 export function ensureBooted(): Promise<Adb> {
-  if (!g.__dispatchEmu) {
-    g.__dispatchEmu = (async () => {
-      const adb = new Adb();
-      if (!(await deviceOnline())) {
-        // windowed but not focused; -no-snapshot for a clean session
-        spawn(ANDROID.emulatorPath, ["-avd", ANDROID.avdName, "-no-snapshot", "-gpu", "auto"], {
-          detached: true, stdio: "ignore",
-        }).unref();
-      }
-      // wait up to 120s for boot
-      for (let i = 0; i < 40; i++) {
-        if (await deviceOnline() && await bootedFlag(adb)) return adb;
-        await new Promise((r) => setTimeout(r, 3000));
-      }
+  if (g.__dispatchEmu) {
+    // Cached singleton may point at a device that died or was quit since boot;
+    // re-validate liveness before trusting it, mirroring browser.ts's close-event reset.
+    return g.__dispatchEmu.then(async (adb) => {
+      if (await deviceOnline()) return adb;
       g.__dispatchEmu = null;
-      throw new Error("emulator did not boot within 120s");
-    })().catch((e) => { g.__dispatchEmu = null; throw e; });
+      return ensureBooted();
+    });
   }
+  g.__dispatchEmu = (async () => {
+    const adb = new Adb();
+    if (!(await deviceOnline())) {
+      // windowed but not focused; -no-snapshot for a clean session
+      spawn(ANDROID.emulatorPath, ["-avd", ANDROID.avdName, "-no-snapshot", "-gpu", "auto"], {
+        detached: true, stdio: "ignore",
+      }).unref();
+    }
+    // wait up to 120s for boot
+    for (let i = 0; i < 40; i++) {
+      if (await deviceOnline() && await bootedFlag(adb)) return adb;
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+    g.__dispatchEmu = null;
+    throw new Error("emulator did not boot within 120s");
+  })().catch((e) => { g.__dispatchEmu = null; throw e; });
   return g.__dispatchEmu;
 }
 
