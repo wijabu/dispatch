@@ -147,7 +147,9 @@ describe("computeTasks — price_drop", () => {
 });
 
 describe("computeTasks — relist", () => {
-  const published = { id: 1, status: "published" as const, askingPrice: 6800 };
+  // At floor (askingPrice === minimumPrice) so these cadence/policy cases
+  // clear the drop-to-floor-then-relist gate on their own merits.
+  const published = { id: 1, status: "published" as const, askingPrice: 6800, minimumPrice: 6800 };
 
   it("suggests delete-repost relist on OfferUp after 7 days", () => {
     const item = makeItem(published);
@@ -240,6 +242,27 @@ describe("computeTasks — relist", () => {
     const tasks = computeTasks(inputs({ items: [item], activeListings: [listing] }));
     expect(tasks.filter((t) => t.type === "relist")).toEqual([]);
   });
+
+  it("suppresses relist while the item can still drop (above floor)", () => {
+    const item = makeItem({ id: 1, status: "published", askingPrice: 100, minimumPrice: 50 });
+    const listing = makeListing({ itemId: 1, listedAt: "2026-05-01 12:00:00" }); // well overdue
+    const tasks = computeTasks(inputs({ items: [item], activeListings: [listing] }));
+    expect(tasks.some((t) => t.type === "relist" && t.itemId === 1)).toBe(false);
+  });
+
+  it("emits relist once the item is at its floor and cadence is due", () => {
+    const item = makeItem({ id: 1, status: "published", askingPrice: 50, minimumPrice: 50 });
+    const listing = makeListing({ itemId: 1, listedAt: "2026-05-01 12:00:00" }); // well overdue
+    const tasks = computeTasks(inputs({ items: [item], activeListings: [listing] }));
+    expect(tasks.some((t) => t.type === "relist" && t.itemId === 1)).toBe(true);
+  });
+
+  it("no relist when minimum price is null — item never reaches a floor", () => {
+    const item = makeItem({ id: 1, status: "published", askingPrice: 50, minimumPrice: null });
+    const listing = makeListing({ itemId: 1, listedAt: "2026-05-01 12:00:00" }); // well overdue
+    const tasks = computeTasks(inputs({ items: [item], activeListings: [listing] }));
+    expect(tasks.filter((t) => t.type === "relist")).toEqual([]);
+  });
 });
 
 describe("computeTasks — stale_price", () => {
@@ -254,7 +277,8 @@ describe("computeTasks — stale_price", () => {
   });
 
   it("passes the listing url through on stale_price and relist tasks", () => {
-    const item = makeItem({ id: 1, status: "published", askingPrice: 6596 });
+    // At floor so the relist gate is satisfied alongside the stale price.
+    const item = makeItem({ id: 1, status: "published", askingPrice: 6596, minimumPrice: 6596 });
     const listing = makeListing({
       listedPrice: 6800,
       listedAt: "2026-07-01 12:00:00",
@@ -325,14 +349,19 @@ describe("computeTasks — ready_to_publish", () => {
 
 describe("computeTasks — ordering", () => {
   it("orders price_drop, stale_price, relist, ready_to_publish", () => {
+    // price_drop and relist are mutually exclusive on one item post-gate
+    // (drop fires above floor, relist fires at floor), so two items are
+    // needed to exercise all four task types together.
     const dropItem = makeItem({
       id: 1, status: "published", askingPrice: 100, minimumPrice: 50,
       dropAmount: 10, dropIntervalDays: 7, createdAt: "2026-06-01 12:00:00",
     });
+    const relistItem = makeItem({ id: 4, status: "published", askingPrice: 50, minimumPrice: 50 });
     const readyItem = makeItem({ id: 2, status: "ready" });
-    const listing = makeListing({ itemId: 1, listedPrice: 90, listedAt: "2026-07-01 12:00:00" });
+    const dropListing = makeListing({ itemId: 1, listedPrice: 90, listedAt: "2026-07-01 12:00:00" });
+    const relistListing = makeListing({ id: 2, itemId: 4, listedPrice: 50, listedAt: "2026-05-01 12:00:00" });
     const types = computeTasks(
-      inputs({ items: [dropItem, readyItem], activeListings: [listing] })
+      inputs({ items: [dropItem, relistItem, readyItem], activeListings: [dropListing, relistListing] })
     ).map((t) => t.type);
     expect(types).toEqual(["price_drop", "stale_price", "relist", "ready_to_publish"]);
   });

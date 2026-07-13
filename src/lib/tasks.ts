@@ -104,6 +104,15 @@ export function computeTasks(inputs: TaskInputs): Task[] {
       });
     }
 
+    // Drop-to-floor-then-relist, all channels: relisting only begins once
+    // the item can no longer drop (askingPrice at or below minimumPrice).
+    // While above floor, the price_drop task carries this cycle instead.
+    // An item with no minimumPrice never reaches a floor and so never
+    // relists — it keeps dropping indefinitely (documented behavior).
+    const atFloor =
+      item.minimumPrice != null && item.askingPrice != null && item.askingPrice <= item.minimumPrice;
+    if (!atFloor) continue;
+
     const policy = pub.relistPolicy;
     const listedAge = daysBetween(parseDbDate(listing.listedAt), now);
     const anchor =
