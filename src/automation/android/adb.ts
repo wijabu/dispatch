@@ -14,6 +14,24 @@ export interface UiNode {
 
 const BOUNDS_RE = /\[(\d+),(\d+)\]\[(\d+),(\d+)\]/;
 
+const XML_ENTITIES: Record<string, string> = {
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&#39;": "'",
+  "&#10;": "\n",
+};
+const XML_ENTITY_RE = /&amp;|&lt;|&gt;|&quot;|&#39;|&#10;/g;
+
+// uiautomator XML attribute values keep entities raw (e.g. OfferUp category
+// labels contain literal "&amp;" for "Home & Garden"). Decode so downstream
+// text matching (findByTextContains, category-sheet matching) works against
+// the real display string.
+function decodeXmlEntities(s: string): string {
+  return s.replace(XML_ENTITY_RE, (m) => XML_ENTITIES[m]);
+}
+
 export function parseUiTree(xml: string): UiNode[] {
   const nodes: UiNode[] = [];
   // uiautomator emits flat self-describing <node .../> elements; regex over
@@ -22,7 +40,7 @@ export function parseUiTree(xml: string): UiNode[] {
   for (const m of xml.matchAll(nodeRe)) {
     const tag = m[0];
     const attr = (name: string) =>
-      new RegExp(`${name}="([^"]*)"`).exec(tag)?.[1] ?? "";
+      decodeXmlEntities(new RegExp(`${name}="([^"]*)"`).exec(tag)?.[1] ?? "");
     const b = BOUNDS_RE.exec(attr("bounds"));
     if (!b) continue;
     const bounds: [number, number, number, number] = [

@@ -25,3 +25,12 @@ describe("uiautomator parse", () => {
     expect(findByTestId(parseUiTree(xml), "does.not.exist")).toBeUndefined();
   });
 });
+
+describe("XML entity decoding", () => {
+  it("decodes entities in both text and testId attributes", () => {
+    const entityXml = `<hierarchy><node index="0" text="Home &amp; Garden" resource-id="category.item &lt;Home &amp; Garden&gt; &quot;top&quot; &#39;pick&#39;&#10;line2" class="android.widget.TextView" bounds="[0,0][10,10]" /></hierarchy>`;
+    const [node] = parseUiTree(entityXml);
+    expect(node.text).toBe("Home & Garden");
+    expect(node.testId).toBe('category.item <Home & Garden> "top" \'pick\'\nline2');
+  });
+});
