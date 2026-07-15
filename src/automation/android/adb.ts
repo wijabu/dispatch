@@ -127,8 +127,13 @@ export class Adb {
   async typeText(text: string): Promise<void> {
     const lines = splitLines(text);
     for (let i = 0; i < lines.length; i++) {
-      const b64 = Buffer.from(lines[i], "utf8").toString("base64");
-      await this.shell(["am", "broadcast", "-a", "ADB_INPUT_B64", "--es", "msg", b64]);
+      // Skip the broadcast for a blank line — base64("") is "" and
+      // `am broadcast --es msg` errors on an empty value. The ENTER below
+      // still creates the blank line between paragraphs.
+      if (lines[i].length > 0) {
+        const b64 = Buffer.from(lines[i], "utf8").toString("base64");
+        await this.shell(["am", "broadcast", "-a", "ADB_INPUT_B64", "--es", "msg", b64]);
+      }
       if (i < lines.length - 1) {
         await this.shell(["input", "keyevent", "66"]);
       }
