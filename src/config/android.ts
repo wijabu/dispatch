@@ -17,13 +17,46 @@ export const ANDROID = {
 // Flip on once live acceptance passes.
 export const OFFERUP_AUTOMATION_ENABLED = true;
 
-// Known testIDs captured from the OfferUp RN app (2026-07-13). Central so a
-// selector change on an app update is a one-line edit.
+// Known testIDs captured live from the OfferUp RN app (2026-07-13, expanded
+// with the post/reprice flow selectors from the live-capture session). Central
+// so a selector change on an app update is a one-line edit.
 export const offerupTestIds = {
+  // Bottom nav
+  postTab: "tab-bar-widget.tab.post",
   accountTab: "tab-bar-widget.tab.account",
+  listingsTab: "tab-bar-widget.tab.listings",
+  // Account -> listings -> manage (reprice/relist entry)
   publicProfile: "account-screen.public-profile",
   listingByTitle: (title: string) => `ProfileListingItem.btn.${title}`,
   manageOwnItem: "ItemDetailScreenBottomBarManageOwnItemButton",
   editPostLink: "item-dashboard-screen.edit-post-link",
   markSold: "item-dashboard-screen.mark-sold-button",
+  // Post/Edit composer — single-page form (Edit-post reuses this; confirm live)
+  mediaSelectorButton: "MediaSelectorButton", // opens the CameraRoll bottom sheet
+  titleField: "TitleField",
+  descriptionField: "DescriptionField",
+  priceField: "PriceField",
+  categoryField: "CategoryField",
+  conditionField: "ConditionField",
+  locationField: "LocationField",
+  submitAction: "PostItemHeader.rightAction", // label becomes "Post" once valid; NEVER tap for a brand-new listing
+  // Photo picker (CameraRoll bottom sheet)
+  photoTile: "CameraRollListMediaAssetItem", // one per gallery photo; newest first
+  photoConfirm: "CameraRollFooterUploadButton", // confirms the selected tiles
 } as const;
+
+// Item category -> OfferUp category picker display text (matched by text on the
+// category sheet; matcher must be XML-entity aware since labels contain "&",
+// e.g. "Home & Garden", "Electronics & Media", "Clothing, Shoes, & Accessories").
+// Confirmed live: furniture->"Home & Garden", electronics->"Electronics & Media".
+// watches/general labels are best-effort (category sheet was only partly scrolled
+// during capture) — verify against the full list at live acceptance.
+export const offerupCategoryMap: Record<string, string> = {
+  watches: "Jewelry & Accessories",
+  furniture: "Home & Garden",
+  electronics: "Electronics & Media",
+  general: "General",
+};
+
+// OfferUp condition options are plain-text selectables on the composer.
+export const OFFERUP_CONDITIONS = ["New", "Open Box", "Refurbished", "Used", "Broken"] as const;
