@@ -77,6 +77,43 @@ export function findByTextContains(
   return nodes.find((n) => n.text.includes(substr) || n.testId.includes(substr));
 }
 
+// `input text` on-device chokes on non-ASCII (NullPointerException on the
+// uiautomator side), and OfferUp descriptions routinely carry bullets, curly
+// quotes, dashes, and ellipses from copy/paste. Transliterate the common
+// cases to their ASCII equivalents, then drop anything else outside the
+// printable ASCII range rather than let it reach the device shell.
+const ASCII_TRANSLITERATIONS: Record<string, string> = {
+  "•": "-", // •
+  "‘": "'", // '
+  "’": "'", // '
+  "“": '"', // "
+  "”": '"', // "
+  "–": "-", // –
+  "—": "-", // —
+  "…": "...", // …
+  " ": " ", // non-breaking space
+};
+
+export function asciiNormalize(s: string): string {
+  let out = "";
+  for (const ch of s) {
+    const replacement = ASCII_TRANSLITERATIONS[ch];
+    if (replacement !== undefined) {
+      out += replacement;
+      continue;
+    }
+    if (ch.codePointAt(0)! <= 126) out += ch;
+  }
+  return out;
+}
+
+// Wrap `s` in single quotes for the DEVICE shell, escaping any embedded
+// single quote as close-quote/escaped-quote/reopen-quote so the whole thing
+// survives `adb shell` -> device `sh -c` as one literal argument.
+function deviceSingleQuote(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}
+
 export class Adb {
   constructor(private serial = ANDROID.deviceSerial) {}
   private args(rest: string[]) {
@@ -110,7 +147,18 @@ export class Adb {
   tapNode(n: UiNode) {
     return this.tap(n.center[0], n.center[1]);
   }
-  typeText(text: string) {
-    return this.shell(["input", "text", text.replace(/ /g, "%s")]);
+  async typeText(text: string): Promise<void> {
+    const normalized = asciiNormalize(text);
+    if (normalized === "") return;
+    const lines = normalized.split(/\r\n|\r|\n/);
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.length > 0) {
+        await this.shell([`input text ${deviceSingleQuote(line)}`]);
+      }
+      if (i < lines.length - 1) {
+        await this.shell(["input", "keyevent", "66"]);
+      }
+    }
   }
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import fs from "fs";
 import path from "path";
-import { parseUiTree, findByTestId, findByTextContains } from "../adb";
+import { parseUiTree, findByTestId, findByTextContains, asciiNormalize } from "../adb";
 
 const xml = fs.readFileSync(
   path.join(process.cwd(), "src/automation/android/__tests__/fixtures/offerup-listing.xml"),
@@ -32,5 +32,39 @@ describe("XML entity decoding", () => {
     const [node] = parseUiTree(entityXml);
     expect(node.text).toBe("Home & Garden");
     expect(node.testId).toBe('category.item <Home & Garden> "top" \'pick\'\nline2');
+  });
+});
+
+describe("asciiNormalize", () => {
+  it("transliterates a bullet to a hyphen", () => {
+    expect(asciiNormalize("Key features • Spacious")).toBe("Key features - Spacious");
+  });
+  it("transliterates curly single and double quotes to straight quotes", () => {
+    expect(asciiNormalize("It’s 47” wide")).toBe('It\'s 47" wide');
+    expect(asciiNormalize("‘quoted’ and “double”")).toBe(
+      "'quoted' and \"double\""
+    );
+  });
+  it("transliterates en-dash and em-dash to a hyphen", () => {
+    expect(asciiNormalize("2020–2022")).toBe("2020-2022");
+    expect(asciiNormalize("great condition—barely used")).toBe(
+      "great condition-barely used"
+    );
+  });
+  it("transliterates an ellipsis to three periods", () => {
+    expect(asciiNormalize("more info…")).toBe("more info...");
+  });
+  it("collapses a non-breaking space to a normal space", () => {
+    expect(asciiNormalize("47 inches")).toBe("47 inches");
+  });
+  it("drops remaining non-ASCII characters, including multi-byte emoji", () => {
+    expect(asciiNormalize("emoji 🚀 gone")).toBe("emoji  gone");
+  });
+  it("keeps normal ASCII text and embedded newlines untouched", () => {
+    expect(asciiNormalize("Line one\nLine two")).toBe("Line one\nLine two");
+    expect(asciiNormalize("plain ASCII 123 !@#$%^&*()")).toBe("plain ASCII 123 !@#$%^&*()");
+  });
+  it("no-ops on an empty string", () => {
+    expect(asciiNormalize("")).toBe("");
   });
 });

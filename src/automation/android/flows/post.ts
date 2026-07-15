@@ -34,20 +34,6 @@ const CONDITION_MAP: Record<Condition, (typeof OFFERUP_CONDITIONS)[number]> = {
   for_parts: "Broken",
 };
 
-// `adb shell <cmd...>` reassembles its argv into a single command string that
-// the device's shell parses, so unescaped shell metacharacters in typed text
-// (&, |, ;, $, backticks, quotes, brackets) can truncate the command or type
-// garbage instead of the intended value. `input text` also has no reliable
-// way to enter a literal newline. This is a best-effort sanitizer, not a
-// fix — text entry is the most fragile step in this flow and is expected to
-// need live tuning during Task 12 acceptance if titles/descriptions with
-// unusual punctuation render wrong on-device.
-function sanitizeForInputText(value: string): string {
-  return value
-    .replace(/[\r\n]+/g, " ")
-    .replace(/[&|;$`<>(){}"']/g, "");
-}
-
 async function waitForNode(
   adb: Adb,
   find: (nodes: UiNode[]) => UiNode | undefined,
@@ -67,7 +53,7 @@ async function fillField(adb: Adb, testId: string, value: string): Promise<void>
   const field = findByTestId(await adb.dumpUi(), testId);
   if (!field) throw new Error(`field not found: ${testId}`);
   await adb.tapNode(field);
-  await adb.typeText(sanitizeForInputText(value));
+  await adb.typeText(value);
 }
 
 async function captureFailureScreenshot(adb: Adb, step: string): Promise<void> {
