@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import fs from "fs";
 import path from "path";
-import { parseUiTree, findByTestId, findByTextContains, asciiNormalize } from "../adb";
+import { parseUiTree, findByTestId, findByTextContains, splitLines } from "../adb";
 
 const xml = fs.readFileSync(
   path.join(process.cwd(), "src/automation/android/__tests__/fixtures/offerup-listing.xml"),
@@ -35,36 +35,20 @@ describe("XML entity decoding", () => {
   });
 });
 
-describe("asciiNormalize", () => {
-  it("transliterates a bullet to a hyphen", () => {
-    expect(asciiNormalize("Key features • Spacious")).toBe("Key features - Spacious");
+describe("splitLines", () => {
+  it("returns a single-element array for an empty string", () => {
+    expect(splitLines("")).toEqual([""]);
   });
-  it("transliterates curly single and double quotes to straight quotes", () => {
-    expect(asciiNormalize("It’s 47” wide")).toBe('It\'s 47" wide');
-    expect(asciiNormalize("‘quoted’ and “double”")).toBe(
-      "'quoted' and \"double\""
-    );
+  it("splits on a plain newline", () => {
+    expect(splitLines("a\nb")).toEqual(["a", "b"]);
   });
-  it("transliterates en-dash and em-dash to a hyphen", () => {
-    expect(asciiNormalize("2020–2022")).toBe("2020-2022");
-    expect(asciiNormalize("great condition—barely used")).toBe(
-      "great condition-barely used"
-    );
+  it("splits on CRLF and preserves an empty line between blank CRLF pairs", () => {
+    expect(splitLines("a\r\n\r\nb")).toEqual(["a", "", "b"]);
   });
-  it("transliterates an ellipsis to three periods", () => {
-    expect(asciiNormalize("more info…")).toBe("more info...");
+  it("splits on a bare CR", () => {
+    expect(splitLines("a\rb")).toEqual(["a", "b"]);
   });
-  it("collapses a non-breaking space to a normal space", () => {
-    expect(asciiNormalize("47 inches")).toBe("47 inches");
-  });
-  it("drops remaining non-ASCII characters, including multi-byte emoji", () => {
-    expect(asciiNormalize("emoji 🚀 gone")).toBe("emoji  gone");
-  });
-  it("keeps normal ASCII text and embedded newlines untouched", () => {
-    expect(asciiNormalize("Line one\nLine two")).toBe("Line one\nLine two");
-    expect(asciiNormalize("plain ASCII 123 !@#$%^&*()")).toBe("plain ASCII 123 !@#$%^&*()");
-  });
-  it("no-ops on an empty string", () => {
-    expect(asciiNormalize("")).toBe("");
+  it("no-ops on text with no line breaks", () => {
+    expect(splitLines("just one line")).toEqual(["just one line"]);
   });
 });

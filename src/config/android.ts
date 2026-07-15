@@ -12,6 +12,10 @@ export const ANDROID = {
   deviceSerial: "emulator-5554",
   photoPushDir: "/sdcard/Pictures",
   debugDir: path.join(process.cwd(), "data", "automation-debug"),
+  // ADBKeyBoard IME (package com.android.adbkeyboard) — installed + enabled as
+  // a one-time manual setup step. Types arbitrary Unicode via broadcast,
+  // replacing the flaky ASCII-only `adb shell input text`.
+  adbKeyboardIme: "com.android.adbkeyboard/.AdbIME",
 } as const;
 
 // Flip on once live acceptance passes.

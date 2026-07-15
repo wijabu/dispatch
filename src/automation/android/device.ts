@@ -57,3 +57,11 @@ export async function isOfferupLoggedOut(adb: Adb): Promise<boolean> {
   // Logged-in shows the bottom tab bar; its absence => logged out / wall.
   return !nodes.some((n) => n.testId.startsWith("tab-bar-widget.tab"));
 }
+
+// Idempotent self-heal: makes sure ADBKeyBoard is the active IME before any
+// typing step runs, in case the emulator's default IME changed since setup.
+// Installing + enabling ADBKeyBoard itself is a one-time manual setup step
+// and NOT this function's job — it only flips the active IME.
+export async function ensureAdbKeyboard(adb: Adb): Promise<void> {
+  await adb.shell(["ime", "set", ANDROID.adbKeyboardIme]);
+}

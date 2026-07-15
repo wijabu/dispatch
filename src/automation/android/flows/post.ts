@@ -8,7 +8,12 @@ import {
   OFFERUP_CONDITIONS,
 } from "@/config/android";
 import { Adb, findByTestId, findByTextContains, type UiNode } from "../adb";
-import { ensureBooted, foregroundEmulator, isOfferupLoggedOut } from "../device";
+import {
+  ensureAdbKeyboard,
+  ensureBooted,
+  foregroundEmulator,
+  isOfferupLoggedOut,
+} from "../device";
 import {
   newTracker,
   resolveResult,
@@ -37,12 +42,19 @@ const CONDITION_MAP: Record<Condition, (typeof OFFERUP_CONDITIONS)[number]> = {
 async function waitForNode(
   adb: Adb,
   find: (nodes: UiNode[]) => UiNode | undefined,
-  timeoutMs = 8000,
-  intervalMs = 400
+  timeoutMs = 15000,
+  intervalMs = 500
 ): Promise<UiNode> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
-    const node = find(await adb.dumpUi());
+    // uiautomator can transiently fail ("could not get idle state") on an
+    // animating/loading screen — treat that as "not found yet" and keep polling.
+    let node: UiNode | undefined;
+    try {
+      node = find(await adb.dumpUi());
+    } catch {
+      node = undefined;
+    }
     if (node) return node;
     if (Date.now() >= deadline) throw new Error("timed out waiting for UI element");
     await new Promise((r) => setTimeout(r, intervalMs));
@@ -91,6 +103,7 @@ export async function postOfferup(
 ): Promise<AndroidResult> {
   const adb = await ensureBooted();
   if (await isOfferupLoggedOut(adb)) return { status: "login_required" };
+  await ensureAdbKeyboard(adb);
 
   const t = newTracker();
 
@@ -130,7 +143,8 @@ export async function postOfferup(
       const postTab = findByTestId(await adb.dumpUi(), offerupTestIds.postTab);
       if (!postTab) throw new Error(`postTab not found: ${offerupTestIds.postTab}`);
       await adb.tapNode(postTab);
-      await waitForNode(adb, (nodes) => findByTestId(nodes, offerupTestIds.titleField));
+      // Composer can be slow to render on a cold app — give it room.
+      await waitForNode(adb, (nodes) => findByTestId(nodes, offerupTestIds.titleField), 25000);
     }))
   )
     return resolveResult(t);
