@@ -12,6 +12,7 @@ import {
   ensureBooted,
   foregroundEmulator,
   isOfferupLoggedOut,
+  launchOfferup,
 } from "../device";
 import {
   newTracker,
@@ -101,6 +102,7 @@ export async function postOfferup(
   opts: { autoSubmit?: boolean } = {}
 ): Promise<AndroidResult> {
   const adb = await ensureBooted();
+  await launchOfferup(adb);
   if (await isOfferupLoggedOut(adb)) return { status: "login_required" };
   await ensureAdbKeyboard(adb);
 

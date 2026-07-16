@@ -1,6 +1,6 @@
 import { offerupTestIds } from "@/config/android";
-import { findByTestId } from "../adb";
-import { ensureAdbKeyboard, ensureBooted, isOfferupLoggedOut } from "../device";
+import { findByContentDesc, findByTestId, type UiNode } from "../adb";
+import { ensureAdbKeyboard, ensureBooted, isOfferupLoggedOut, launchOfferup } from "../device";
 import { newTracker, resolveResult, type AndroidResult, type FlowContext } from "../types";
 import { step, waitForNode } from "./post";
 
@@ -13,6 +13,7 @@ export async function repriceOfferup(ctx: FlowContext): Promise<AndroidResult> {
     return { status: "failed", step: "reprice", reason: "no newPrice provided" };
   }
   const adb = await ensureBooted();
+  await launchOfferup(adb);
   if (await isOfferupLoggedOut(adb)) return { status: "login_required" };
   await ensureAdbKeyboard(adb);
 
@@ -79,7 +80,37 @@ export async function repriceOfferup(ctx: FlowContext): Promise<AndroidResult> {
 
   if (
     !(await step(adb, t, "save", async () => {
-      await tap(offerupTestIds.submitAction);
+      // The Save button sits behind the on-screen keyboard; the price field is
+      // focused, so BACK closes the keyboard (doesn't navigate) and reveals it.
+      await adb.shell(["input", "keyevent", "4"]);
+      await new Promise((r) => setTimeout(r, 1200));
+      // Edit-post's save is a full-width "Save" button carrying only a
+      // content-desc (PostItemHeader.rightAction is a dead element on Edit).
+      const save = findByContentDesc(await adb.dumpUi(), "Save");
+      if (!save) throw new Error("Save button not found");
+      await adb.tapNode(save);
+      // Completion: the Edit composer closes (price field gone) = the edit saved.
+      let closed = false;
+      for (let i = 0; i < 10; i++) {
+        const nodes = await adb.dumpUi().catch(() => [] as UiNode[]);
+        if (nodes.length && !findByTestId(nodes, offerupTestIds.priceField)) {
+          closed = true;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      if (!closed) throw new Error("edit screen did not close after save");
+      // OfferUp then shows a paid "Promote" upsell — dismiss it (BACK); never
+      // touch the paid trial/promote buttons.
+      for (let i = 0; i < 3; i++) {
+        const nodes = await adb.dumpUi().catch(() => [] as UiNode[]);
+        const upsell = nodes.some(
+          (n) => n.testId.startsWith("SellFasterScreenNav") || n.text === "Promote"
+        );
+        if (!upsell) break;
+        await adb.shell(["input", "keyevent", "4"]);
+        await new Promise((r) => setTimeout(r, 1000));
+      }
     }))
   )
     return resolveResult(t);

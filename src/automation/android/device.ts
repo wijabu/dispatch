@@ -1,7 +1,7 @@
 import { execFile, spawn } from "child_process";
 import { promisify } from "util";
 import { ANDROID } from "@/config/android";
-import { Adb } from "./adb";
+import { Adb, type UiNode } from "./adb";
 
 const run = promisify(execFile);
 const g = globalThis as unknown as { __dispatchEmu?: Promise<Adb> | null };
@@ -52,10 +52,45 @@ export async function foregroundEmulator(): Promise<void> {
   await run("open", ["-a", "qemu-system-aarch64"]).catch(() => {});
 }
 
+// Launch/foreground OfferUp and land on a clean top-level screen. `monkey`
+// only RESUMES the app, which may be on a sub-screen (e.g. an Item Dashboard)
+// with no bottom tab bar — flows expect to start from home, so pop back until
+// the tab bar is showing (stop the moment it appears so we don't back out of
+// the app). If logged out there's no tab bar to find; the caller's login
+// check handles that.
+export async function launchOfferup(adb: Adb): Promise<void> {
+  await adb.shell([
+    "monkey", "-p", "com.offerup", "-c", "android.intent.category.LAUNCHER", "1",
+  ]);
+  await new Promise((r) => setTimeout(r, 3000));
+  for (let i = 0; i < 6; i++) {
+    let nodes: UiNode[] = [];
+    try {
+      nodes = await adb.dumpUi();
+    } catch {
+      // transient dump failure — wait and retry
+    }
+    if (nodes.some((n) => n.testId.startsWith("tab-bar-widget.tab"))) return;
+    await adb.shell(["input", "keyevent", "4"]); // back
+    await new Promise((r) => setTimeout(r, 1200));
+  }
+}
+
+// Logged-in OfferUp shows the bottom tab bar. Poll for it: a single dump can
+// transiently fail ("could not get idle state") or catch the launch splash,
+// and neither means logged out. Only conclude logged-out if the tab bar is
+// persistently absent.
 export async function isOfferupLoggedOut(adb: Adb): Promise<boolean> {
-  const nodes = await adb.dumpUi();
-  // Logged-in shows the bottom tab bar; its absence => logged out / wall.
-  return !nodes.some((n) => n.testId.startsWith("tab-bar-widget.tab"));
+  for (let i = 0; i < 8; i++) {
+    try {
+      const nodes = await adb.dumpUi();
+      if (nodes.some((n) => n.testId.startsWith("tab-bar-widget.tab"))) return false;
+    } catch {
+      // transient dump failure — retry
+    }
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+  return true;
 }
 
 // Idempotent self-heal: makes sure ADBKeyBoard is the active IME before any

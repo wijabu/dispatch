@@ -7,6 +7,7 @@ const run = promisify(execFile);
 export interface UiNode {
   testId: string;
   text: string;
+  contentDesc: string;
   className: string;
   bounds: [number, number, number, number];
   center: [number, number];
@@ -52,6 +53,7 @@ export function parseUiTree(xml: string): UiNode[] {
     nodes.push({
       testId: attr("resource-id"),
       text: attr("text"),
+      contentDesc: attr("content-desc"),
       className: attr("class"),
       bounds,
       center: [
@@ -68,6 +70,15 @@ export function findByTestId(
   testId: string
 ): UiNode | undefined {
   return nodes.find((n) => n.testId === testId);
+}
+
+// Some controls (e.g. OfferUp's Edit "Save" button) carry no testId/text — only
+// an accessibility content-desc. Match a clickable one by exact content-desc.
+export function findByContentDesc(
+  nodes: UiNode[],
+  desc: string
+): UiNode | undefined {
+  return nodes.find((n) => n.contentDesc === desc);
 }
 
 export function findByTextContains(
