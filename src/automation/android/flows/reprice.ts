@@ -46,14 +46,19 @@ export async function repriceOfferup(ctx: FlowContext): Promise<AndroidResult> {
   if (
     !(await step(adb, t, "open listing", async () => {
       const wanted = offerupTestIds.listingByTitle(title);
-      let node = findByTestId(await adb.dumpUi(), wanted);
-      for (let i = 0; i < 6 && !node; i++) {
+      let matches = (await adb.dumpUi()).filter((n) => n.testId === wanted);
+      for (let i = 0; i < 6 && matches.length === 0; i++) {
         await adb.shell(["input", "swipe", "540", "1600", "540", "800", "250"]);
         await new Promise((r) => setTimeout(r, 800));
-        node = findByTestId(await adb.dumpUi(), wanted);
+        matches = (await adb.dumpUi()).filter((n) => n.testId === wanted);
       }
-      if (!node) throw new Error(`listing not found: ${title}`);
-      await adb.tapNode(node);
+      if (matches.length === 0) throw new Error(`listing not found: ${title}`);
+      // Refuse to guess if two listings share the title (the state a future
+      // relist creates mid-flight) — editing the wrong one is worse than stopping.
+      if (matches.length > 1) {
+        throw new Error(`ambiguous title: ${matches.length} listings named "${title}" — resolve on OfferUp first`);
+      }
+      await adb.tapNode(matches[0]);
       await waitForNode(adb, (nodes) => findByTestId(nodes, offerupTestIds.manageOwnItem));
     }))
   )

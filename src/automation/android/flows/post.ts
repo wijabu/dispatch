@@ -6,7 +6,7 @@ import {
   offerupTestIds,
   OFFERUP_CONDITIONS,
 } from "@/config/android";
-import { Adb, findByTestId, findByTextContains, type UiNode } from "../adb";
+import { Adb, findByTestId, type UiNode } from "../adb";
 import {
   ensureAdbKeyboard,
   ensureBooted,
@@ -122,6 +122,10 @@ export async function postOfferup(
   // each so OfferUp's CameraRoll picker sees them immediately.
   if (
     !(await step(adb, t, "push photos", async () => {
+      // Clear any leftovers from a prior run so the picker's newest tiles are
+      // exactly this item's photos (a previous item with more photos would
+      // otherwise leave stray dispatch_*.jpg files in the gallery).
+      await adb.shell(["rm", "-f", `${ANDROID.photoPushDir}/dispatch_*.jpg`]);
       for (let i = 0; i < ctx.photoPaths.length; i++) {
         const remote = `${ANDROID.photoPushDir}/dispatch_${String(i).padStart(2, "0")}.jpg`;
         await adb.push(ctx.photoPaths[i], remote);
@@ -211,12 +215,24 @@ export async function postOfferup(
         await adb.tapNode(catField);
         // picker opens
         await waitForNode(adb, (nodes) => nodes.find((n) => n.text === "Select a category"));
-        // tap the top-level to expand its subcategories
-        const top = await waitForNode(adb, (nodes) => nodes.find((n) => n.text === catName));
-        await adb.tapNode(top);
-        // tap the subcategory — selects it and closes the picker
-        const sub = await waitForNode(adb, (nodes) => nodes.find((n) => n.text === subName));
-        await adb.tapNode(sub);
+        // The category list is long and virtualized — uiautomator only dumps
+        // rendered rows, so scroll until the exact label appears (a static
+        // waitForNode would time out on any below-the-fold category/subcategory).
+        const scrollToText = async (label: string): Promise<void> => {
+          for (let i = 0; i < 10; i++) {
+            const node = (await adb.dumpUi()).find((n) => n.text === label);
+            if (node) {
+              await adb.tapNode(node);
+              return;
+            }
+            await adb.shell(["input", "swipe", "540", "1700", "540", "800", "250"]);
+            await new Promise((r) => setTimeout(r, 700));
+          }
+          throw new Error(`category option not found: ${label}`);
+        };
+        // tap the top-level to expand its subcategories, then the subcategory
+        await scrollToText(catName);
+        await scrollToText(subName);
         // completion check: picker closed and we're back on the composer
         await waitForNode(adb, (nodes) => findByTestId(nodes, offerupTestIds.titleField));
         if ((await adb.dumpUi()).some((n) => n.text === "Select a category")) {
@@ -234,7 +250,9 @@ export async function postOfferup(
       if (!condField) throw new Error(`conditionField not found: ${offerupTestIds.conditionField}`);
       await adb.tapNode(condField);
       const label = CONDITION_MAP[ctx.item.condition] ?? "Used";
-      const option = await waitForNode(adb, (nodes) => findByTextContains(nodes, label));
+      // Exact text match — a substring match could hit the word in the
+      // description (e.g. "Used once") instead of the condition chip.
+      const option = await waitForNode(adb, (nodes) => nodes.find((n) => n.text === label));
       await adb.tapNode(option);
     }))
   )
