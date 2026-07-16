@@ -69,6 +69,8 @@ function itemFieldsFromForm(formData: FormData) {
       const n = Number(String(formData.get("dropIntervalDays") ?? "").trim());
       return Number.isInteger(n) && n > 0 ? n : null;
     })(),
+    offerupCategory: String(formData.get("offerupCategory") ?? "").trim() || null,
+    offerupSubcategory: String(formData.get("offerupSubcategory") ?? "").trim() || null,
   };
 }
 
