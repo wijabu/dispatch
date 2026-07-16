@@ -38,7 +38,7 @@ const CONDITION_MAP: Record<Condition, (typeof OFFERUP_CONDITIONS)[number]> = {
   for_parts: "Broken",
 };
 
-async function waitForNode(
+export async function waitForNode(
   adb: Adb,
   find: (nodes: UiNode[]) => UiNode | undefined,
   timeoutMs = 15000,
@@ -67,7 +67,7 @@ async function fillField(adb: Adb, testId: string, value: string): Promise<void>
   await adb.typeText(value);
 }
 
-async function captureFailureScreenshot(adb: Adb, step: string): Promise<void> {
+export async function captureFailureScreenshot(adb: Adb, step: string): Promise<void> {
   try {
     await fs.promises.mkdir(ANDROID.debugDir, { recursive: true });
     const dest = path.join(
@@ -85,7 +85,7 @@ async function captureFailureScreenshot(adb: Adb, step: string): Promise<void> {
 // whole run on failure — once the on-device UI state is unknown, blindly
 // continuing to tap through the rest of the form risks fat-fingering the wrong
 // control, so we degrade to resolveResult(t) instead.
-async function step(
+export async function step(
   adb: Adb,
   t: StepTracker,
   name: string,

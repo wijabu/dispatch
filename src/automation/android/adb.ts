@@ -139,4 +139,9 @@ export class Adb {
       }
     }
   }
+
+  // Clears the currently focused field via ADBKeyBoard's clear broadcast.
+  async clearText(): Promise<void> {
+    await this.shell(["am", "broadcast", "-a", "ADB_CLEAR_TEXT"]);
+  }
 }
