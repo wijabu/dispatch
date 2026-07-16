@@ -84,9 +84,15 @@ export async function repriceOfferup(ctx: FlowContext): Promise<AndroidResult> {
       // focused, so BACK closes the keyboard (doesn't navigate) and reveals it.
       await adb.shell(["input", "keyevent", "4"]);
       await new Promise((r) => setTimeout(r, 1200));
-      // Edit-post's save is a full-width "Save" button carrying only a
-      // content-desc (PostItemHeader.rightAction is a dead element on Edit).
-      const save = findByContentDesc(await adb.dumpUi(), "Save");
+      // Edit-post's save is a full-width "Save" button at the BOTTOM of the
+      // form, carrying only a content-desc (rightAction is dead on Edit).
+      // Scroll down until it's revealed.
+      let save = findByContentDesc(await adb.dumpUi(), "Save");
+      for (let i = 0; i < 5 && !save; i++) {
+        await adb.shell(["input", "swipe", "540", "1600", "540", "800", "250"]);
+        await new Promise((r) => setTimeout(r, 800));
+        save = findByContentDesc(await adb.dumpUi(), "Save");
+      }
       if (!save) throw new Error("Save button not found");
       await adb.tapNode(save);
       // Completion: the Edit composer closes (price field gone) = the edit saved.
