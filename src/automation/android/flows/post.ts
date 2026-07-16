@@ -3,7 +3,6 @@ import path from "path";
 import type { Condition } from "@/db/schema";
 import {
   ANDROID,
-  offerupCategoryMap,
   offerupTestIds,
   OFFERUP_CONDITIONS,
 } from "@/config/android";
@@ -195,19 +194,36 @@ export async function postOfferup(
   )
     return resolveResult(t);
 
-  // 6. Category — matched by decoded label text (see the adb.ts entity-decode
-  // prerequisite; labels like "Home & Garden" arrive as raw "&amp;" in the XML).
-  if (
-    !(await step(adb, t, "select category", async () => {
-      const catField = findByTestId(await adb.dumpUi(), offerupTestIds.categoryField);
-      if (!catField) throw new Error(`categoryField not found: ${offerupTestIds.categoryField}`);
-      await adb.tapNode(catField);
-      const label = offerupCategoryMap[ctx.item.category] ?? offerupCategoryMap.general;
-      const option = await waitForNode(adb, (nodes) => findByTextContains(nodes, label));
-      await adb.tapNode(option);
-    }))
-  )
-    return resolveResult(t);
+  // 6. Category — two-level selection from the item's stored OfferUp category +
+  // subcategory (set by the user in Dispatch; entity-decoded labels like
+  // "Home & Garden" are matched EXACTLY so they can't collide with
+  // "Other - Home & Garden"). If the item has no category set, skip: a
+  // brand-new post stops at the review gate where the user picks it by hand.
+  const catName = ctx.item.offerupCategory;
+  const subName = ctx.item.offerupSubcategory;
+  if (catName && subName) {
+    if (
+      !(await step(adb, t, "select category", async () => {
+        const catField = findByTestId(await adb.dumpUi(), offerupTestIds.categoryField);
+        if (!catField) throw new Error(`categoryField not found: ${offerupTestIds.categoryField}`);
+        await adb.tapNode(catField);
+        // picker opens
+        await waitForNode(adb, (nodes) => nodes.find((n) => n.text === "Select a category"));
+        // tap the top-level to expand its subcategories
+        const top = await waitForNode(adb, (nodes) => nodes.find((n) => n.text === catName));
+        await adb.tapNode(top);
+        // tap the subcategory — selects it and closes the picker
+        const sub = await waitForNode(adb, (nodes) => nodes.find((n) => n.text === subName));
+        await adb.tapNode(sub);
+        // completion check: picker closed and we're back on the composer
+        await waitForNode(adb, (nodes) => findByTestId(nodes, offerupTestIds.titleField));
+        if ((await adb.dumpUi()).some((n) => n.text === "Select a category")) {
+          throw new Error("category picker did not close after selecting subcategory");
+        }
+      }))
+    )
+      return resolveResult(t);
+  }
 
   // 7. Condition.
   if (

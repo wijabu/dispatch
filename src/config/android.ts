@@ -49,18 +49,10 @@ export const offerupTestIds = {
   photoConfirm: "CameraRollFooterUploadButton", // confirms the selected tiles
 } as const;
 
-// Item category -> OfferUp category picker display text (matched by text on the
-// category sheet; matcher must be XML-entity aware since labels contain "&",
-// e.g. "Home & Garden", "Electronics & Media", "Clothing, Shoes, & Accessories").
-// Confirmed live: furniture->"Home & Garden", electronics->"Electronics & Media".
-// watches/general labels are best-effort (category sheet was only partly scrolled
-// during capture) — verify against the full list at live acceptance.
-export const offerupCategoryMap: Record<string, string> = {
-  watches: "Jewelry & Accessories",
-  furniture: "Home & Garden",
-  electronics: "Electronics & Media",
-  general: "General",
-};
+// (Category is no longer a fuzzy Dispatch-category->OfferUp guess: each item
+// carries its exact OfferUp category + subcategory, set by the user in Dispatch,
+// and the flow selects that two-level path. See src/config/offerup-categories.ts
+// for the full taxonomy.)
 
 // OfferUp condition options are plain-text selectables on the composer.
 export const OFFERUP_CONDITIONS = ["New", "Open Box", "Refurbished", "Used", "Broken"] as const;
