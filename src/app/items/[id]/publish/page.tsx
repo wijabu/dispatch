@@ -6,7 +6,7 @@ import { ChannelCard } from "@/components/ChannelCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { describeRelistPolicy } from "@/lib/format";
 import { AUTOFILL_CHANNELS, buildStagedBundle } from "@/config/staging";
-import { OFFERUP_AUTOMATION_ENABLED } from "@/config/android";
+import { OFFERUP_AUTOMATION_ENABLED, OFFERUP_POST_ENABLED } from "@/config/android";
 
 export default async function PublishPage({
   params,
@@ -62,6 +62,7 @@ export default async function PublishPage({
               }
               stagedBundle={buildStagedBundle(generated)}
               offerupAutomation={pub.id === "offerup" ? OFFERUP_AUTOMATION_ENABLED : undefined}
+              offerupPostEnabled={pub.id === "offerup" ? OFFERUP_POST_ENABLED : undefined}
             />
           );
         })}

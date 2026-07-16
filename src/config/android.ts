@@ -21,6 +21,13 @@ export const ANDROID = {
 // Flip on once live acceptance passes.
 export const OFFERUP_AUTOMATION_ENABLED = true;
 
+// The post flow works, but its category auto-select is only robust for simple
+// two-level categories (e.g. Home & Garden > Furniture); long/complex ones
+// (e.g. Business equipment > Office equipment & Supplies) don't reliably close
+// the picker. Keep the "Post to OfferUp" button hidden until that's hardened.
+// Reprice ("Sync price to OfferUp") is unaffected and stays live.
+export const OFFERUP_POST_ENABLED = false;
+
 // Known testIDs captured live from the OfferUp RN app (2026-07-13, expanded
 // with the post/reprice flow selectors from the live-capture session). Central
 // so a selector change on an app update is a one-line edit.

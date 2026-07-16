@@ -46,6 +46,7 @@ export function ChannelCard({
   stagedBundle,
   note,
   offerupAutomation,
+  offerupPostEnabled,
 }: {
   publisherId: string;
   publisherName: string;
@@ -58,7 +59,8 @@ export function ChannelCard({
   stageTier: "facebook" | "reddit" | "watchuseek" | null;
   stagedBundle: string; // paste-ready text for staged handoff
   note?: string | null; // channel-specific hint
-  offerupAutomation?: boolean; // OfferUp Android automation (post/reprice) available
+  offerupAutomation?: boolean; // OfferUp reprice ("Sync price") available
+  offerupPostEnabled?: boolean; // OfferUp "Post" button shown (held back until category is robust)
 }) {
   const [expanded, setExpanded] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -164,7 +166,7 @@ export function ChannelCard({
               </button>
             </>
           )}
-          {offerupAutomation && !listing && (
+          {offerupPostEnabled && !listing && (
             <button
               type="button"
               disabled={isPending}
