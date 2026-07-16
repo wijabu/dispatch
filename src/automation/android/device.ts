@@ -4,7 +4,23 @@ import { ANDROID } from "@/config/android";
 import { Adb } from "./adb";
 
 const run = promisify(execFile);
-const g = globalThis as unknown as { __dispatchEmu?: Promise<Adb> | null };
+const g = globalThis as unknown as {
+  __dispatchEmu?: Promise<Adb> | null;
+  __dispatchAndroidInProgress?: boolean;
+};
+
+// One Android automation flow at a time — mirrors acquireFillLock/
+// releaseFillLock in src/automation/browser.ts, but for the emulator instead
+// of the Playwright browser context.
+export function acquireAndroidLock(): boolean {
+  if (g.__dispatchAndroidInProgress) return false;
+  g.__dispatchAndroidInProgress = true;
+  return true;
+}
+
+export function releaseAndroidLock(): void {
+  g.__dispatchAndroidInProgress = false;
+}
 
 async function deviceOnline(): Promise<boolean> {
   try {
