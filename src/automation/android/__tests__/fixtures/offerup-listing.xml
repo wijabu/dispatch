@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<hierarchy rotation="0">
+  <node index="0" text="" resource-id="" class="android.widget.FrameLayout" bounds="[0,0][1080,2400]">
+    <node index="1" text="Account" resource-id="tab-bar-widget.tab.account" class="android.widget.TextView" bounds="[879,2253][997,2306]" />
+    <node index="2" text="Sample Desk" resource-id="ProfileListingItem.btn.Sample Desk" class="android.view.ViewGroup" bounds="[40,300][520,900]" />
+    <node index="3" text="Edit post" resource-id="item-dashboard-screen.edit-post-link" class="android.widget.TextView" bounds="[60,1800][1020,1900]" />
+    <node index="4" text="$40" resource-id="item-dashboard-screen.item-detail.price" class="android.widget.TextView" bounds="[60,400][300,470]" />
+  </node>
+</hierarchy>

@@ -5,6 +5,7 @@ import type { Item } from "@/db/schema";
 import { CONDITIONS, VISIBLE_ITEM_STATUSES } from "@/db/schema";
 import { CONDITION_LABELS, STATUS_LABELS } from "@/lib/format";
 import { CATEGORY_SUGGESTIONS } from "@/config/categories";
+import { OFFERUP_CATEGORIES, offerupSubcategories } from "@/config/offerup-categories";
 import { PhotoDropzone } from "@/components/PhotoDropzone";
 
 const inputClass =
@@ -22,6 +23,12 @@ export function ItemForm({
     item ? Object.entries(item.attributes) : []
   );
   const [category, setCategory] = useState(item?.category ?? "general");
+  const [offerupCategory, setOfferupCategory] = useState(
+    item?.offerupCategory ?? ""
+  );
+  const [offerupSubcategory, setOfferupSubcategory] = useState(
+    item?.offerupSubcategory ?? ""
+  );
 
   function addAttribute(key = "") {
     // Functional update: rapid successive clicks (e.g. two chips) are batched
@@ -66,6 +73,49 @@ export function ItemForm({
             <option value="clothing" />
             <option value="tools" />
           </datalist>
+        </div>
+
+        <div>
+          <label className={labelClass} htmlFor="offerupCategory">
+            OfferUp category
+          </label>
+          <select
+            id="offerupCategory"
+            name="offerupCategory"
+            value={offerupCategory}
+            onChange={(e) => {
+              setOfferupCategory(e.target.value);
+              setOfferupSubcategory("");
+            }}
+            className={inputClass}
+          >
+            <option value="">— none —</option>
+            {OFFERUP_CATEGORIES.map((c) => (
+              <option key={c.name} value={c.name}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className={labelClass} htmlFor="offerupSubcategory">
+            OfferUp subcategory
+          </label>
+          <select
+            id="offerupSubcategory"
+            name="offerupSubcategory"
+            value={offerupSubcategory}
+            onChange={(e) => setOfferupSubcategory(e.target.value)}
+            className={inputClass}
+          >
+            <option value="">— none —</option>
+            {offerupSubcategories(offerupCategory).map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div>

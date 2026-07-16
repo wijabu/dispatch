@@ -3,13 +3,18 @@
 import { execFile } from "child_process";
 import { promisify } from "util";
 import path from "path";
+import { revalidatePath } from "next/cache";
 import { db, PHOTOS_DIR } from "@/db";
 import { getItem } from "@/lib/queries";
 import { getPublisher } from "@/publishers";
 import { getFillScript, type FillResult } from "@/automation";
 import { acquireFillLock, getBrowserContext, releaseFillLock } from "@/automation/browser";
+import { postOfferup, repriceOfferup, type AndroidResult } from "@/automation/android";
+import { acquireAndroidLock, releaseAndroidLock } from "@/automation/android/device";
 import { AUTOFILL_CHANNELS, STAGING } from "@/config/staging";
+import { OFFERUP_AUTOMATION_ENABLED } from "@/config/android";
 import { stagePhotosCore } from "@/lib/staging-core";
+import { syncListingPriceCore } from "@/lib/task-actions";
 
 const run = promisify(execFile);
 const STAGING_ROOT = path.join(process.cwd(), "data", "staging");
@@ -89,4 +94,80 @@ export async function stageForFacebook(
 export async function openListingInDedicatedBrowser(url: string): Promise<void> {
   if (!/^https:\/\//.test(url)) throw new Error("Invalid listing URL");
   await run("open", ["-a", STAGING.dedicatedBrowser, url]);
+}
+
+// Mirrors openAndPrefill's lock/load/generate/finally shape, but drives the
+// Android emulator (via postOfferup) instead of the Playwright browser.
+export async function postToOfferup(itemId: number): Promise<AndroidResult> {
+  if (!OFFERUP_AUTOMATION_ENABLED) {
+    return { status: "failed", step: "config", reason: "OfferUp automation is disabled" };
+  }
+  const item = await getItem(itemId);
+  if (!item) return { status: "failed", step: "load", reason: "Item not found" };
+
+  const { photos, listings: _l, prices: _p, ...itemRow } = item;
+  const listing = getPublisher("offerup")!.generate(itemRow, photos);
+  const photoPaths = photos.map((p) => path.join(PHOTOS_DIR, p.path));
+
+  if (!acquireAndroidLock()) {
+    return { status: "failed", step: "lock", reason: "another OfferUp automation is running" };
+  }
+  try {
+    return await postOfferup({ listing, item: itemRow, photoPaths });
+  } catch (err) {
+    return {
+      status: "failed",
+      step: "unknown",
+      reason: err instanceof Error ? err.message : "Unknown error",
+    };
+  } finally {
+    releaseAndroidLock();
+  }
+}
+
+// Pushes the item's current asking price (already dropped in Dispatch) out to
+// the live OfferUp listing, then reconciles the listing's recorded price.
+export async function dropOfferupPrice(
+  itemId: number,
+  listingId: number
+): Promise<AndroidResult> {
+  if (!OFFERUP_AUTOMATION_ENABLED) {
+    return { status: "failed", step: "config", reason: "OfferUp automation is disabled" };
+  }
+  const item = await getItem(itemId);
+  if (!item) return { status: "failed", step: "load", reason: "Item not found" };
+  if (item.askingPrice == null) {
+    return { status: "failed", step: "load", reason: "Item has no asking price" };
+  }
+  const newPrice = item.askingPrice;
+
+  const { photos, listings: _l, prices: _p, ...itemRow } = item;
+  const listing = getPublisher("offerup")!.generate(itemRow, photos);
+
+  if (!acquireAndroidLock()) {
+    return { status: "failed", step: "lock", reason: "another OfferUp automation is running" };
+  }
+  let result: AndroidResult;
+  try {
+    result = await repriceOfferup({
+      item: itemRow,
+      listing,
+      photoPaths: [],
+      newPrice,
+    });
+    if (result.status === "done") {
+      await syncListingPriceCore(db, listingId);
+    }
+  } catch (err) {
+    result = {
+      status: "failed",
+      step: "unknown",
+      reason: err instanceof Error ? err.message : "Unknown error",
+    };
+  } finally {
+    releaseAndroidLock();
+  }
+  revalidatePath("/");
+  revalidatePath(`/items/${itemId}/publish`);
+  return result;
 }

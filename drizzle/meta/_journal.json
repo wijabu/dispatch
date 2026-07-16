@@ -15,6 +15,13 @@
       "when": 1783712332007,
       "tag": "0001_neat_silhouette",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1784226709228,
+      "tag": "0002_first_hairball",
+      "breakpoints": true
     }
   ]
 }

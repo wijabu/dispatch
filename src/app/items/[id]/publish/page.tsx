@@ -6,6 +6,7 @@ import { ChannelCard } from "@/components/ChannelCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { describeRelistPolicy } from "@/lib/format";
 import { AUTOFILL_CHANNELS, buildStagedBundle } from "@/config/staging";
+import { OFFERUP_AUTOMATION_ENABLED, OFFERUP_POST_ENABLED } from "@/config/android";
 
 export default async function PublishPage({
   params,
@@ -60,11 +61,8 @@ export default async function PublishPage({
                       : null
               }
               stagedBundle={buildStagedBundle(generated)}
-              note={
-                pub.id === "offerup"
-                  ? "OfferUp disabled web posting — it's app-only now. Copy the text above and post from the OfferUp app."
-                  : null
-              }
+              offerupAutomation={pub.id === "offerup" ? OFFERUP_AUTOMATION_ENABLED : undefined}
+              offerupPostEnabled={pub.id === "offerup" ? OFFERUP_POST_ENABLED : undefined}
             />
           );
         })}

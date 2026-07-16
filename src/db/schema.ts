@@ -47,6 +47,10 @@ export const items = sqliteTable("items", {
   askingPrice: real("asking_price"),
   minimumPrice: real("minimum_price"),
   soldPrice: real("sold_price"),
+  // OfferUp category taxonomy, set by the user; used to auto-select the
+  // category during OfferUp posting automation. Null = not yet set.
+  offerupCategory: text("offerup_category"),
+  offerupSubcategory: text("offerup_subcategory"),
   notes: text("notes").notNull().default(""),
   // v1.1 repricing cadence — all optional; null = no cadence
   dropAmount: real("drop_amount"),

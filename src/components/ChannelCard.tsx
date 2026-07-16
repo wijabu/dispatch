@@ -5,8 +5,15 @@ import type { GeneratedListing } from "@/publishers/types";
 import type { Listing } from "@/db/schema";
 import { markListed, markListingEnded } from "@/lib/actions";
 import { formatDate, formatPrice } from "@/lib/format";
-import { openAndPrefill, openForLogin, stageForFacebook } from "@/lib/automation-actions";
+import {
+  openAndPrefill,
+  openForLogin,
+  postToOfferup,
+  dropOfferupPrice,
+  stageForFacebook,
+} from "@/lib/automation-actions";
 import type { FillResult } from "@/automation/types";
+import type { AndroidResult } from "@/automation/android";
 import { STAGING } from "@/config/staging";
 
 function CopyButton({ label, text }: { label: string; text: string }) {
@@ -38,6 +45,8 @@ export function ChannelCard({
   stageTier,
   stagedBundle,
   note,
+  offerupAutomation,
+  offerupPostEnabled,
 }: {
   publisherId: string;
   publisherName: string;
@@ -49,12 +58,15 @@ export function ChannelCard({
   autoFill: boolean; // Tier 1 available for this channel
   stageTier: "facebook" | "reddit" | "watchuseek" | null;
   stagedBundle: string; // paste-ready text for staged handoff
-  note?: string | null; // channel-specific hint (e.g. OfferUp is app-only)
+  note?: string | null; // channel-specific hint
+  offerupAutomation?: boolean; // OfferUp reprice ("Sync price") available
+  offerupPostEnabled?: boolean; // OfferUp "Post" button shown (held back until category is robust)
 }) {
   const [expanded, setExpanded] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [fillResult, setFillResult] = useState<FillResult | null>(null);
   const [stageNote, setStageNote] = useState<string | null>(null);
+  const [androidResult, setAndroidResult] = useState<AndroidResult | null>(null);
 
   function fillStatusLine(r: FillResult): string {
     switch (r.status) {
@@ -66,6 +78,19 @@ export function ChannelCard({
         return `⚠️ Filled ${r.filled.join(", ")}; ${r.failedAt} failed — finish that part by hand.`;
       case "failed":
         return `❌ Auto-fill failed (${r.reason}) — window is open; use the copy buttons.`;
+    }
+  }
+
+  function offerupStatusLine(r: AndroidResult, mode: "post" | "sync"): string {
+    switch (r.status) {
+      case "posted_review":
+        return "Filled — review in the emulator, tap Post, then Mark listed.";
+      case "done":
+        return mode === "post" ? "Posted ✓" : "Price synced ✓";
+      case "login_required":
+        return "Log into OfferUp in the emulator, then retry.";
+      case "failed":
+        return `Failed at ${r.step} (${r.reason}) — screenshot saved.`;
     }
   }
 
@@ -140,6 +165,38 @@ export function ChannelCard({
                 {isPending ? "Filling…" : "Open & pre-fill"}
               </button>
             </>
+          )}
+          {offerupPostEnabled && !listing && (
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() =>
+                startTransition(async () => {
+                  setStageNote(null);
+                  setAndroidResult(null);
+                  setAndroidResult(await postToOfferup(itemId));
+                })
+              }
+              className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isPending ? "Posting…" : "Post to OfferUp"}
+            </button>
+          )}
+          {offerupAutomation && listing && (
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() =>
+                startTransition(async () => {
+                  setStageNote(null);
+                  setAndroidResult(null);
+                  setAndroidResult(await dropOfferupPrice(itemId, listing.id));
+                })
+              }
+              className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isPending ? "Syncing…" : "Sync price to OfferUp"}
+            </button>
           )}
           {stageTier === "facebook" && (
             <button
@@ -233,6 +290,11 @@ export function ChannelCard({
       )}
       {fillResult && (
         <div className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">{fillStatusLine(fillResult)}</div>
+      )}
+      {androidResult && (
+        <div className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
+          {offerupStatusLine(androidResult, listing ? "sync" : "post")}
+        </div>
       )}
       {stageNote && (
         <div className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">{stageNote}</div>
