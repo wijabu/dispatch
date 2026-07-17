@@ -1,5 +1,5 @@
 import type { Publisher } from "./types";
-import { commonWarnings, conditionLabel, specLines } from "./helpers";
+import { commonWarnings, conditionLabel, formatDescription, specLines } from "./helpers";
 
 const TITLE_LIMIT = 80;
 const PHOTO_LIMIT = 12;
@@ -17,7 +17,7 @@ export const offerup: Publisher = {
       warnings.push(`OfferUp allows up to ${PHOTO_LIMIT} photos; you have ${photos.length}`);
     }
     const specs = specLines(item);
-    const body = [item.description, `Condition: ${conditionLabel(item)}`, ...specs]
+    const body = [formatDescription(item.description), `Condition: ${conditionLabel(item)}`, ...specs]
       .filter(Boolean)
       .join("\n");
     return {
