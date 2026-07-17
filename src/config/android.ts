@@ -21,12 +21,13 @@ export const ANDROID = {
 // Flip on once live acceptance passes.
 export const OFFERUP_AUTOMATION_ENABLED = true;
 
-// The post flow works, but its category auto-select is only robust for simple
-// two-level categories (e.g. Home & Garden > Furniture); long/complex ones
-// (e.g. Business equipment > Office equipment & Supplies) don't reliably close
-// the picker. Keep the "Post to OfferUp" button hidden until that's hardened.
-// Reprice ("Sync price to OfferUp") is unaffected and stays live.
-export const OFFERUP_POST_ENABLED = false;
+// Post flow is live. Category auto-select uses the picker's "Search categories"
+// box (type the subcategory, tap the leaf matched by its full-path content-desc
+// "<sub>, <cat>"), which sidesteps the old fragile scroll-and-tap accordion and
+// works for both simple and bottom-of-list categories. Live-verified to the
+// review gate for Home & Garden > Furniture and Business equipment > Office
+// equipment & Supplies (2026-07-17).
+export const OFFERUP_POST_ENABLED = true;
 
 // Known testIDs captured live from the OfferUp RN app (2026-07-13, expanded
 // with the post/reprice flow selectors from the live-capture session). Central
