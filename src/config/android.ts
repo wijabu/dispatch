@@ -41,8 +41,10 @@ export const offerupTestIds = {
   publicProfile: "account-screen.public-profile",
   listingByTitle: (title: string) => `ProfileListingItem.btn.${title}`,
   manageOwnItem: "ItemDetailScreenBottomBarManageOwnItemButton",
+  shareButton: "ItemDetailScreenHeaderShareButton", // opens the OS share sheet (listing URL as text)
   editPostLink: "item-dashboard-screen.edit-post-link",
   markSold: "item-dashboard-screen.mark-sold-button",
+  dashboardEllipses: "item-dashboard-screen.ellipses-button", // "⋯" overflow → Share / Archive sheet
   // Post/Edit composer — single-page form (Edit-post reuses this; confirm live)
   mediaSelectorButton: "MediaSelectorButton", // opens the CameraRoll bottom sheet
   titleField: "TitleField",

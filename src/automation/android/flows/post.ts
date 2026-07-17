@@ -307,6 +307,30 @@ export async function postOfferup(
         const submit = findByTestId(await adb.dumpUi(), offerupTestIds.submitAction);
         if (!submit) throw new Error(`submitAction not found: ${offerupTestIds.submitAction}`);
         await adb.tapNode(submit);
+        // Confirm the post actually went through: the composer ("Post an item"
+        // form with the title field) disappears once OfferUp accepts the
+        // listing. Without this a silent submit failure reads as success — which
+        // is dangerous on the relist path, where the NEXT step archives the old
+        // listing. If the composer never closes, this times out and the step
+        // fails, so relist bails before it can delete the only live listing.
+        await waitForNode(
+          adb,
+          (nodes) => (findByTestId(nodes, offerupTestIds.titleField) ? undefined : (nodes[0] ?? undefined)),
+          20000,
+          1000,
+          "fresh post to complete (composer to close)"
+        );
+        // OfferUp then shows a paid "Promote"/"Sell faster" upsell — dismiss it
+        // with BACK; never touch the paid buttons.
+        for (let i = 0; i < 3; i++) {
+          const nodes = await adb.dumpUi().catch(() => [] as UiNode[]);
+          const upsell = nodes.some(
+            (n) => n.testId.startsWith("SellFaster") || n.text === "Promote"
+          );
+          if (!upsell) break;
+          await adb.shell(["input", "keyevent", "4"]);
+          await new Promise((r) => setTimeout(r, 1000));
+        }
       }))
     )
       return resolveResult(t);
