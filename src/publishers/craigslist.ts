@@ -1,5 +1,5 @@
 import type { Publisher } from "./types";
-import { commonWarnings, conditionLabel, formatUsd, specLines } from "./helpers";
+import { commonWarnings, conditionLabel, formatDescription, formatUsd, specLines } from "./helpers";
 
 const TITLE_LIMIT = 70;
 
@@ -15,7 +15,7 @@ export const craigslist: Publisher = {
       warnings.push(`Title exceeds Craigslist's ${TITLE_LIMIT}-character limit (${title.length})`);
     }
     const specs = specLines(item);
-    const body = [item.description, `Condition: ${conditionLabel(item)}`, ...specs]
+    const body = [formatDescription(item.description), `Condition: ${conditionLabel(item)}`, ...specs]
       .filter(Boolean)
       .join("\n");
     return { title, body, warnings };
