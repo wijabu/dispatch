@@ -26,8 +26,6 @@ import { postOfferup, step, waitForNode } from "./post";
 // No ledger storage needed: the anchor is captured live each run, at the one
 // moment it's unambiguous.
 
-const PILL_LABEL = "item-dashboard-screen.item-detail.pillStack.label";
-
 const tapId = (adb: Adb) => async (testId: string) => {
   const node = findByTestId(await adb.dumpUi(), testId);
   if (!node) throw new Error(`not found: ${testId}`);
@@ -141,44 +139,53 @@ async function captureListingUrl(adb: Adb, title: string): Promise<string> {
   return url;
 }
 
-// Deep-link straight to a specific listing and archive it: Manage this item ->
-// "..." overflow -> Archive. Tapping "Archive" fires the request immediately —
-// there is NO confirm dialog (verified live 2026-07-17). OfferUp shows a
-// "Something went wrong" error dialog if it rejects the request (seen in the
-// emulator on a listing with active buyer offers; archiving the same listing
-// works on a real phone), so we detect that and report it instead of timing
-// out. Success = THIS item's status pill flips to "Archived" (matched by the
-// pill's testId, not any stray "Archived" text elsewhere in the tree).
-async function archiveByUrl(adb: Adb, url: string): Promise<void> {
-  const tap = tapId(adb);
-  // A clean force-stop + VIEW intent lands deterministically on the listing.
+// Open a listing by URL and land on its Item Dashboard (Manage this item).
+async function openListingDashboard(adb: Adb, url: string): Promise<void> {
+  // A clean force-stop + VIEW intent lands deterministically on the listing (and
+  // clears any leftover dialog). Cold-start after the fresh post can be slow.
   await adb.shell(["am", "force-stop", "com.offerup"]);
   await sleep(1000);
   await adb.shell(["am", "start", "-a", "android.intent.action.VIEW", "-d", url]);
-  // Cold-start after the fresh post can be slow, so allow generous time.
-  await waitForNode(adb, (n) => findByTestId(n, offerupTestIds.manageOwnItem), 40000, 1000, "old listing detail (deep link)");
-  await tap(offerupTestIds.manageOwnItem);
+  await waitForNode(adb, (n) => findByTestId(n, offerupTestIds.manageOwnItem), 40000, 1000, "listing detail (deep link)");
+  await tapId(adb)(offerupTestIds.manageOwnItem);
   await waitForNode(adb, (n) => findByTestId(n, offerupTestIds.dashboardEllipses), 15000, 500, "item dashboard");
-  await tap(offerupTestIds.dashboardEllipses);
-  // The "..." sheet lists Share / Archive / Cancel. The "Archive" text node is
-  // non-clickable but sits inside its full-width clickable row, so tapping its
-  // center hits the row.
-  const archiveRow = await waitForNode(adb, (n) => n.find((x) => x.text === "Archive"), 10000, 500, "archive option");
-  await adb.tapNode(archiveRow);
-  // Poll for the outcome.
-  const deadline = Date.now() + 15000;
-  for (;;) {
-    const nodes = await adb.dumpUi().catch(() => [] as UiNode[]);
-    if (nodes.some((n) => n.text === "Something went wrong")) {
-      throw new Error('OfferUp rejected the archive request ("Something went wrong")');
-    }
-    const pill = findByTestId(nodes, PILL_LABEL);
-    if (pill && pill.text === "Archived") return;
-    if (Date.now() > deadline) {
-      throw new Error("archive not confirmed (status pill never reached Archived)");
-    }
-    await sleep(1000);
+}
+
+// On the Item Dashboard, the listing's summary row carries an accessibility
+// content-desc like "<title>, Active, Posted 06/05/26, ..., $40, 43 views". An
+// archived (unlisted) listing drops the "Active" segment — the only reliable,
+// queryable archived signal (the "UNLISTED" badge on the item screen is an
+// unlabeled graphic, and the dashboard buttons are identical either way).
+function isArchivedOnDashboard(nodes: UiNode[]): boolean {
+  const row = nodes.find((n) => /, Posted \d/.test(n.contentDesc));
+  return !!row && !/, Active,/.test(row.contentDesc);
+}
+
+// Deep-link to a specific listing and archive it: Manage this item -> "..."
+// overflow -> Archive. Tapping "Archive" fires the request immediately (no
+// confirm dialog). The emulator's OfferUp client is UNRELIABLE about the
+// outcome — it can flash a spurious "Something went wrong" even when the archive
+// succeeds server-side (confirmed 2026-07-18: a listing that errored in the
+// emulator was archived on the real account) — so we do NOT trust that dialog.
+// Instead we reload the listing and read its true state, retrying once.
+async function archiveByUrl(adb: Adb, url: string): Promise<void> {
+  await openListingDashboard(adb, url);
+  if (isArchivedOnDashboard(await adb.dumpUi())) return; // already archived (idempotent)
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await tapId(adb)(offerupTestIds.dashboardEllipses);
+    // The "..." sheet lists Share / Archive / Cancel. The "Archive" text node is
+    // non-clickable but sits inside its full-width clickable row, so tapping its
+    // center hits the row.
+    const archiveRow = await waitForNode(adb, (n) => n.find((x) => x.text === "Archive"), 10000, 500, "archive option");
+    await adb.tapNode(archiveRow);
+    await sleep(2500); // let the request settle (ignore any spurious error dialog)
+    // Reload and check the listing's real state — the force-stop also clears the
+    // error dialog if one is up.
+    await openListingDashboard(adb, url);
+    if (isArchivedOnDashboard(await adb.dumpUi())) return;
   }
+  throw new Error("archive not confirmed after retry (listing still shows Active on reload)");
 }
 
 export async function relistOfferup(ctx: FlowContext): Promise<AndroidResult> {
