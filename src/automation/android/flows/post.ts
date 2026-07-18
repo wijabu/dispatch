@@ -6,7 +6,7 @@ import {
   offerupTestIds,
   OFFERUP_CONDITIONS,
 } from "@/config/android";
-import { Adb, findByTestId, type UiNode } from "../adb";
+import { Adb, findByContentDesc, findByTestId, type UiNode } from "../adb";
 import {
   ensureAdbKeyboard,
   ensureBooted,
@@ -299,13 +299,26 @@ export async function postOfferup(
     return resolveResult(t);
 
   // 8. Submit only when explicitly told to (relist path). A brand-new listing
-  // ALWAYS stops here so Wil taps Post himself — never tap submitAction
-  // otherwise.
+  // ALWAYS stops here so Wil taps Post himself — never tap Post otherwise.
   if (opts.autoSubmit) {
     if (
       !(await step(adb, t, "submit", async () => {
-        const submit = findByTestId(await adb.dumpUi(), offerupTestIds.submitAction);
-        if (!submit) throw new Error(`submitAction not found: ${offerupTestIds.submitAction}`);
+        // The Post button is a full-width content-desc="Post" control at the
+        // BOTTOM of the form (PostItemHeader.rightAction is an empty top-right
+        // node for a new listing, NOT the submit control). Hide the keyboard if
+        // it's up (BACK only when actually shown, else it pops the composer),
+        // then scroll down until Post is revealed and tap it.
+        if ((await adb.shell(["dumpsys", "input_method"])).includes("mInputShown=true")) {
+          await adb.shell(["input", "keyevent", "4"]);
+          await new Promise((r) => setTimeout(r, 600));
+        }
+        let submit = findByContentDesc(await adb.dumpUi(), "Post");
+        for (let i = 0; i < 6 && !submit; i++) {
+          await adb.shell(["input", "swipe", "540", "1700", "540", "800", "250"]);
+          await new Promise((r) => setTimeout(r, 700));
+          submit = findByContentDesc(await adb.dumpUi(), "Post");
+        }
+        if (!submit) throw new Error("Post button not found");
         await adb.tapNode(submit);
         // Confirm the post actually went through: the composer ("Post an item"
         // form with the title field) disappears once OfferUp accepts the
@@ -320,16 +333,21 @@ export async function postOfferup(
           1000,
           "fresh post to complete (composer to close)"
         );
-        // OfferUp then shows a paid "Promote"/"Sell faster" upsell — dismiss it
-        // with BACK; never touch the paid buttons.
-        for (let i = 0; i < 3; i++) {
+        // After a successful post OfferUp shows a "Posted!" success/promote
+        // screen with a "Done" button and NO bottom tab bar. Tap "Done" to
+        // return to the main app (so later navigation can find the tab bar);
+        // fall back to BACK for any promote-upsell variant. Never touch the paid
+        // "Sell 2x faster"/"Promote" buttons.
+        for (let i = 0; i < 5; i++) {
           const nodes = await adb.dumpUi().catch(() => [] as UiNode[]);
-          const upsell = nodes.some(
-            (n) => n.testId.startsWith("SellFaster") || n.text === "Promote"
-          );
-          if (!upsell) break;
-          await adb.shell(["input", "keyevent", "4"]);
-          await new Promise((r) => setTimeout(r, 1000));
+          if (nodes.some((n) => n.testId.startsWith("tab-bar-widget"))) break; // back on main app
+          const done = nodes.find((n) => n.text === "Done" || n.contentDesc === "Done");
+          if (done) {
+            await adb.tapNode(done);
+          } else {
+            await adb.shell(["input", "keyevent", "4"]);
+          }
+          await new Promise((r) => setTimeout(r, 1200));
         }
       }))
     )

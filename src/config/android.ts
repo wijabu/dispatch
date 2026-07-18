@@ -53,7 +53,10 @@ export const offerupTestIds = {
   categoryField: "CategoryField",
   conditionField: "ConditionField",
   locationField: "LocationField",
-  submitAction: "PostItemHeader.rightAction", // label becomes "Post" once valid; NEVER tap for a brand-new listing
+  // The real Post/submit control is a full-width content-desc="Post" button at
+  // the BOTTOM of the composer (found by scrolling), NOT this header node —
+  // PostItemHeader.rightAction is empty for a new listing. Kept for reference.
+  submitAction: "PostItemHeader.rightAction",
   // Photo picker (CameraRoll bottom sheet)
   photoTile: "CameraRollListMediaAssetItem", // one per gallery photo; newest first
   photoConfirm: "CameraRollFooterUploadButton", // confirms the selected tiles
