@@ -32,9 +32,13 @@ export const facebookSelectors = {
   descriptionField: "composer_v3_description",
   addPhotos: "Add photos", // content-desc / text on the photo tile
   publish: "Publish", // bottom of composer (final submit — review-gated)
-  // Seller Hub maintenance surfaces (used by reprice/relist — confirm live in
-  // the flow tasks): "Your listings", the per-listing overflow ("…"), Edit,
-  // Renew, Delete.
+  // Seller Hub maintenance surfaces (reprice/relist). Labels below are the
+  // Facebook UI strings; their exact nodes are confirmed during live acceptance.
+  yourListings: "Your listings",
+  editListing: "Edit listing",
+  renewListing: "Renew",
+  deleteListing: "Delete",
+  markSold: "Mark as sold",
 } as const;
 
 // Facebook's condition chips (captured live). Dispatch's finer condition scale
