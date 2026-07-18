@@ -320,18 +320,21 @@ export async function postOfferup(
         }
         if (!submit) throw new Error("Post button not found");
         await adb.tapNode(submit);
-        // Confirm the post actually went through: the composer ("Post an item"
-        // form with the title field) disappears once OfferUp accepts the
-        // listing. Without this a silent submit failure reads as success — which
-        // is dangerous on the relist path, where the NEXT step archives the old
-        // listing. If the composer never closes, this times out and the step
-        // fails, so relist bails before it can delete the only live listing.
+        // Positive confirmation the listing went live: OfferUp shows a "Posted!"
+        // success screen. This is OfferUp's own signal that the post succeeded —
+        // stronger than "the composer closed" (an under-review or error screen
+        // also closes it), which is what makes it safe for relist to archive the
+        // old listing next. NOTE: the success screen's "available to Premium
+        // members only for the next 30 minutes" note affects only PUBLIC reach,
+        // not whether the post succeeded — so we confirm here and DON'T wait it
+        // out (and must NOT confirm by looking for the listing on the public
+        // profile, where the premium window would hide it for 30 min).
         await waitForNode(
           adb,
-          (nodes) => (findByTestId(nodes, offerupTestIds.titleField) ? undefined : (nodes[0] ?? undefined)),
-          20000,
+          (nodes) => nodes.find((n) => n.text === "Posted!"),
+          25000,
           1000,
-          "fresh post to complete (composer to close)"
+          'the "Posted!" confirmation'
         );
         // After a successful post OfferUp shows a "Posted!" success/promote
         // screen with a "Done" button and NO bottom tab bar. Tap "Done" to

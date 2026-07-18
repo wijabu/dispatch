@@ -200,7 +200,12 @@ export async function relistOfferup(ctx: FlowContext): Promise<AndroidResult> {
     return resolveResult(t);
 
   // 2. Post a fresh copy, auto-submitting (its content was already reviewed when
-  //    the original went live).
+  //    the original went live). postOfferup only returns "done" after it sees
+  //    OfferUp's own "Posted!" confirmation screen, so a "done" here positively
+  //    means the fresh listing went live — the guarantee we need before archiving
+  //    the old one. (We deliberately do NOT re-check by looking for the listing
+  //    on the public profile: OfferUp holds a new post in a 30-minute
+  //    premium-only window, so it wouldn't appear there yet even though it's up.)
   const post = await postOfferup(ctx, { autoSubmit: true });
   if (post.status !== "done") {
     // login_required / failed / (unexpected) posted_review: bail BEFORE archiving
@@ -210,27 +215,7 @@ export async function relistOfferup(ctx: FlowContext): Promise<AndroidResult> {
       : post;
   }
 
-  // 3. Positively confirm the fresh post is LIVE before archiving anything. The
-  //    composer closing (post.ts) proves OfferUp accepted the submit, but not
-  //    that a public listing exists — an under-review/interstitial/error screen
-  //    also dismisses the composer. Verify against OfferUp's own state: the
-  //    profile must now show TWO listings with this title (old + new). If it
-  //    doesn't, refuse to archive so we never end up with zero live listings.
-  if (
-    !(await step(adb, t, "confirm fresh post live", async () => {
-      await gotoProfileListings(adb);
-      await scrollToTop(adb);
-      const count = await countTitleTiles(adb, title);
-      if (count < 2) {
-        throw new Error(
-          `fresh post not visible on profile (${count} listing(s) named "${title}") — not archiving the old one`
-        );
-      }
-    }))
-  )
-    return resolveResult(t);
-
-  // 4. Deep-link to the captured old listing and archive it.
+  // 3. Deep-link to the captured old listing and archive it.
   if (
     !(await step(adb, t, "archive old listing", async () => {
       await archiveByUrl(adb, oldUrl);
