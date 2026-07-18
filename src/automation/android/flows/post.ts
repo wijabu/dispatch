@@ -320,21 +320,30 @@ export async function postOfferup(
         }
         if (!submit) throw new Error("Post button not found");
         await adb.tapNode(submit);
-        // Positive confirmation the listing went live: OfferUp shows a "Posted!"
-        // success screen. This is OfferUp's own signal that the post succeeded —
-        // stronger than "the composer closed" (an under-review or error screen
-        // also closes it), which is what makes it safe for relist to archive the
-        // old listing next. NOTE: the success screen's "available to Premium
-        // members only for the next 30 minutes" note affects only PUBLIC reach,
-        // not whether the post succeeded — so we confirm here and DON'T wait it
-        // out (and must NOT confirm by looking for the listing on the public
-        // profile, where the premium window would hide it for 30 min).
+        // Positive confirmation the listing went live: after a successful post
+        // OfferUp leaves the composer for one of two post-success screens — the
+        // "Posted!" confirmation, OR a full-screen paid "Promote" upsell for the
+        // item just posted ("Best value" / "Start 3 day free trial"). Either
+        // proves the listing was created; this is OfferUp's own signal, stronger
+        // than "the composer closed" (an under-review or error screen also closes
+        // it), which is what makes it safe for relist to archive the old listing
+        // next. NOTE: the "available to Premium members only for the next 30
+        // minutes" note affects only PUBLIC reach, not whether the post
+        // succeeded — so we confirm here and DON'T wait it out (and must NOT
+        // confirm by looking for the listing on the public profile, where the
+        // premium window would hide it for 30 min).
         await waitForNode(
           adb,
-          (nodes) => nodes.find((n) => n.text === "Posted!"),
+          (nodes) =>
+            nodes.find(
+              (n) =>
+                n.text === "Posted!" ||
+                n.text === "Best value" ||
+                n.text === "Start 3 day free trial"
+            ),
           25000,
           1000,
-          'the "Posted!" confirmation'
+          "the post-success screen"
         );
         // After a successful post OfferUp shows a "Posted!" success/promote
         // screen with a "Done" button and NO bottom tab bar. Tap "Done" to
