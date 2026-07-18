@@ -9,10 +9,15 @@ import { getItem } from "@/lib/queries";
 import { getPublisher } from "@/publishers";
 import { getFillScript, type FillResult } from "@/automation";
 import { acquireFillLock, getBrowserContext, releaseFillLock } from "@/automation/browser";
-import { postOfferup, repriceOfferup, relistOfferup, type AndroidResult } from "@/automation/android";
+import {
+  postOfferup, repriceOfferup, relistOfferup,
+  postFacebook, repriceFacebook, relistFacebook,
+  type AndroidResult,
+} from "@/automation/android";
 import { acquireAndroidLock, releaseAndroidLock } from "@/automation/android/device";
 import { AUTOFILL_CHANNELS, STAGING } from "@/config/staging";
 import { OFFERUP_AUTOMATION_ENABLED } from "@/config/android";
+import { FACEBOOK_AUTOMATION_ENABLED } from "@/config/facebook";
 import { stagePhotosCore } from "@/lib/staging-core";
 import { markListingRenewedCore, syncListingPriceCore } from "@/lib/task-actions";
 
@@ -205,6 +210,100 @@ export async function relistOnOfferup(
       step: "unknown",
       reason: err instanceof Error ? err.message : "Unknown error",
     };
+  } finally {
+    releaseAndroidLock();
+  }
+  revalidatePath("/");
+  revalidatePath(`/items/${itemId}/publish`);
+  return result;
+}
+
+// ---- Facebook Marketplace (emulator FB app) — mirrors the OfferUp actions ----
+
+export async function postToFacebook(itemId: number): Promise<AndroidResult> {
+  if (!FACEBOOK_AUTOMATION_ENABLED) {
+    return { status: "failed", step: "config", reason: "Facebook automation is disabled" };
+  }
+  const item = await getItem(itemId);
+  if (!item) return { status: "failed", step: "load", reason: "Item not found" };
+  const { photos, listings: _l, prices: _p, ...itemRow } = item;
+  const listing = getPublisher("facebook")!.generate(itemRow, photos);
+  const photoPaths = photos.map((p) => path.join(PHOTOS_DIR, p.path));
+
+  if (!acquireAndroidLock()) {
+    return { status: "failed", step: "lock", reason: "another automation is running" };
+  }
+  try {
+    return await postFacebook({ listing, item: itemRow, photoPaths });
+  } catch (err) {
+    return { status: "failed", step: "unknown", reason: err instanceof Error ? err.message : "Unknown error" };
+  } finally {
+    releaseAndroidLock();
+  }
+}
+
+export async function dropFacebookPrice(
+  itemId: number,
+  listingId: number
+): Promise<AndroidResult> {
+  if (!FACEBOOK_AUTOMATION_ENABLED) {
+    return { status: "failed", step: "config", reason: "Facebook automation is disabled" };
+  }
+  const item = await getItem(itemId);
+  if (!item) return { status: "failed", step: "load", reason: "Item not found" };
+  if (item.askingPrice == null) {
+    return { status: "failed", step: "load", reason: "Item has no asking price" };
+  }
+  const { photos, listings: _l, prices: _p, ...itemRow } = item;
+  const listing = getPublisher("facebook")!.generate(itemRow, photos);
+
+  if (!acquireAndroidLock()) {
+    return { status: "failed", step: "lock", reason: "another automation is running" };
+  }
+  let result: AndroidResult;
+  try {
+    result = await repriceFacebook({ item: itemRow, listing, photoPaths: [], newPrice: item.askingPrice });
+    if (result.status === "done") await syncListingPriceCore(db, listingId);
+  } catch (err) {
+    result = { status: "failed", step: "unknown", reason: err instanceof Error ? err.message : "Unknown error" };
+  } finally {
+    releaseAndroidLock();
+  }
+  revalidatePath("/");
+  revalidatePath(`/items/${itemId}/publish`);
+  return result;
+}
+
+export async function relistOnFacebook(
+  itemId: number,
+  listingId: number
+): Promise<AndroidResult> {
+  if (!FACEBOOK_AUTOMATION_ENABLED) {
+    return { status: "failed", step: "config", reason: "Facebook automation is disabled" };
+  }
+  const item = await getItem(itemId);
+  if (!item) return { status: "failed", step: "load", reason: "Item not found" };
+
+  // Facebook policy: renew every 7 days, fresh repost after 42. Pick the action
+  // from the listing's age (freshRelistAfterDays = 42 in the publisher policy).
+  const listingRow = item.listings.find((l) => l.id === listingId);
+  const listedAt = listingRow ? new Date(listingRow.listedAt.replace(" ", "T")) : new Date();
+  const ageDays = Math.floor((Date.now() - listedAt.getTime()) / 86_400_000);
+  const action: "renew" | "relist" = ageDays >= 42 ? "relist" : "renew";
+
+  const { photos, listings: _l, prices: _p, ...itemRow } = item;
+  const listing = getPublisher("facebook")!.generate(itemRow, photos);
+  const photoPaths = photos.map((p) => path.join(PHOTOS_DIR, p.path));
+
+  if (!acquireAndroidLock()) {
+    return { status: "failed", step: "lock", reason: "another automation is running" };
+  }
+  let result: AndroidResult;
+  try {
+    result = await relistFacebook({ listing, item: itemRow, photoPaths }, { action });
+    if (result.status === "done") await markListingRenewedCore(db, listingId, new Date());
+  } catch (err) {
+    result = { status: "failed", step: "unknown", reason: err instanceof Error ? err.message : "Unknown error" };
   } finally {
     releaseAndroidLock();
   }
