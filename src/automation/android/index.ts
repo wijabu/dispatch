@@ -3,3 +3,4 @@ export type { AndroidResult, FlowContext } from "./types";
 export { postOfferup } from "./flows/post";
 export { repriceOfferup } from "./flows/reprice";
 export { relistOfferup } from "./flows/relist";
+export { postFacebook } from "./flows/facebook/post";
