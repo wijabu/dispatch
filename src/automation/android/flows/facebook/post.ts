@@ -134,9 +134,24 @@ export async function postFacebook(
         500,
         "in-app gallery"
       );
-      // Tap tiles newest-first. A missing index means the gallery has fewer
-      // tiles than photos pushed — attach what's there and stop.
-      for (let i = 0; i < count; i++) {
+      // The React-Native gallery drops taps issued the instant it renders, so let
+      // it settle before selecting.
+      await new Promise((r) => setTimeout(r, 1800));
+      const nextUp = async () =>
+        findByTestId(await adb.dumpUi(), facebookSelectors.photoConfirm) ??
+        findByContentDesc(await adb.dumpUi(), "Next");
+      // Select the primary tile first and confirm it "took" — the "Next" button
+      // only appears once ≥1 photo is selected, so it doubles as the selection
+      // signal. Retry the tap (not tapped yet → no toggle-off risk) until Next
+      // shows or we give up.
+      for (let a = 0; a < 4 && !(await nextUp()); a++) {
+        const t0 = findByTestId(await adb.dumpUi(), `${facebookSelectors.photoTilePrefix}0`);
+        if (t0) await adb.tapNode(t0);
+        await new Promise((r) => setTimeout(r, 900));
+      }
+      // Add the remaining tiles newest-first. A missing index means the gallery
+      // has fewer tiles than photos pushed — attach what's there and stop.
+      for (let i = 1; i < count; i++) {
         const tile = findByTestId(await adb.dumpUi(), `${facebookSelectors.photoTilePrefix}${i}`);
         if (!tile) break;
         await adb.tapNode(tile);
@@ -190,10 +205,23 @@ export async function postFacebook(
 
   // 6. Condition — map Dispatch's scale to Facebook's chip labels and tap the
   // exact chip (exact text match — a substring could hit the word elsewhere).
+  // The chip row sits above the description field, so filling the description
+  // scrolls it off the top and RN recycles it; hide the keyboard and scroll the
+  // composer back up until the chip renders.
   if (
     !(await step(adb, t, "select condition", async () => {
       const label: string = CONDITION_MAP[ctx.item.condition as Condition] ?? "Used - Good";
-      const chip = await waitForNode(adb, (n) => n.find((x) => x.text === label), 15000, 500, `condition "${label}"`);
+      await adb.shell(["input", "keyevent", "111"]); // ESC — hide the soft keyboard
+      await new Promise((r) => setTimeout(r, 500));
+      let chip: UiNode | undefined;
+      for (let a = 0; a < 6 && !chip; a++) {
+        chip = (await adb.dumpUi()).find((x) => x.text === label);
+        if (chip) break;
+        // Swipe finger downward → scroll the form up → reveal the chip row above.
+        await adb.shell(["input", "swipe", "540", "800", "540", "1500", "250"]);
+        await new Promise((r) => setTimeout(r, 600));
+      }
+      if (!chip) throw new Error(`condition "${label}" not found`);
       await adb.tapNode(chip);
     }))
   )
