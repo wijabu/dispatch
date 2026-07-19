@@ -248,12 +248,13 @@ export async function postFacebook(
   )
     return resolveResult(t);
 
-  // 6b. Location — location permission + pinned GPS (FACEBOOK_LOCATION) are set
-  // before launch; tapping the Location field triggers Facebook to resolve the
-  // pinned coordinates to a selling city and clear the required-field error.
-  // Best-effort: a miss here still reaches the review gate (the exact picker
-  // confirm, if one is needed, is finalized during live acceptance), so this
-  // step never throws.
+  // 6b. Location — Facebook requires a selling location to publish. Location
+  // permission + the pinned GPS (FACEBOOK_LOCATION) are set before launch. Tapping
+  // the Location field opens the "Add location" map picker; "Refresh your location"
+  // snaps the marker to the pinned GPS and "Apply" sets it (the field then shows
+  // the ZIP, e.g. "Location, 32779"). REQUIRES a live GPS fix — if the emulator
+  // reports no location the picker can't resolve and this step fails (surfacing
+  // the problem rather than silently reaching the gate with location unset).
   if (
     !(await step(adb, t, "set location", async () => {
       await adb.shell(["input", "keyevent", "111"]); // hide keyboard
@@ -268,10 +269,28 @@ export async function postFacebook(
         await adb.shell(["input", "swipe", "540", "1500", "540", "700", "250"]);
         await new Promise((r) => setTimeout(r, 500));
       }
-      if (field) {
-        await adb.tapNode(field);
-        await new Promise((r) => setTimeout(r, 3000)); // let FB resolve the pinned GPS
-      }
+      if (!field) throw new Error("location field not found");
+      await adb.tapNode(field);
+      // Map picker: snap the marker to the pinned GPS, let it recenter, then Apply.
+      await tapLabel(adb, facebookSelectors.locationRefresh, 15000);
+      await new Promise((r) => setTimeout(r, 3000));
+      await tapLabel(adb, facebookSelectors.locationApply, 10000);
+      // Confirm the location resolved: the field's content-desc goes from
+      // "Location, , error, …" to "Location, <zip>, …". (The composer returns
+      // scrolled to this field, so the title field up top may be recycled out of
+      // view — check the location field itself, not the title.)
+      await waitForNode(
+        adb,
+        (n) =>
+          n.find(
+            (x) =>
+              x.contentDesc.startsWith(facebookSelectors.locationField) &&
+              !x.contentDesc.includes("error")
+          ),
+        15000,
+        500,
+        "location resolved"
+      );
     }))
   )
     return resolveResult(t);

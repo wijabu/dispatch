@@ -43,6 +43,8 @@ export const facebookSelectors = {
   photoTilePrefix: "camera_roll_image_", // + index (0-based, newest-first)
   photoConfirm: "marketplace_camera_roll_android_next_button", // "Next"
   locationField: "Location,", // content-desc of the selling-location field (prefix)
+  locationRefresh: "Refresh your location", // map-picker button: snap marker to GPS
+  locationApply: "Apply", // map-picker confirm → sets location, returns to composer
   publish: "Publish", // bottom of composer (final submit — review-gated)
   // Seller Hub maintenance surfaces (reprice/relist). Labels below are the
   // Facebook UI strings; their exact nodes are confirmed during live acceptance.
