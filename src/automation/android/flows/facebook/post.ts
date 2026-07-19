@@ -281,11 +281,23 @@ export async function postFacebook(
         await new Promise((r) => setTimeout(r, 600));
       }
       if (!chip) throw new Error(`condition "${label}" not found`);
-      // FB's RN chip ignores an instantaneous tap — press with a short hold.
-      // (Selection isn't reflected in the node's `selected` attribute, so it
-      // can't be verified here; the held press is what makes it stick.)
-      const [cx, cy] = chip.center;
-      await adb.shell(["input", "swipe", String(cx), String(cy), String(cx), String(cy), "150"]);
+      // FB's RN chip ignores an instantaneous tap — press with a short hold. FB
+      // exposes NO selection state on the chip node (`selected` stays false even
+      // when it's visually blue), so the only signal is the reactive "Enter a
+      // condition to continue" error, which clears when a chip is selected.
+      // The chip TOGGLES (re-pressing a selected chip deselects it), so re-press
+      // ONLY while that error still shows — that can never toggle a set chip off.
+      const conditionUnset = async () =>
+        (await adb.dumpUi()).some((x) => x.text.startsWith("Enter a condition"));
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const c = (await adb.dumpUi()).find((x) => x.contentDesc === label || x.text === label);
+        if (c) {
+          const [cx, cy] = c.center;
+          await adb.shell(["input", "swipe", String(cx), String(cy), String(cx), String(cy), "150"]);
+        }
+        await new Promise((r) => setTimeout(r, 1500));
+        if (!(await conditionUnset())) break; // selected (or error not tracked yet)
+      }
     }))
   )
     return resolveResult(t);
