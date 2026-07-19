@@ -90,7 +90,7 @@ export async function setFacebookLocation(adb: Adb): Promise<void> {
 // while empty, and drops the "error" once it holds a value. When `required`, retry
 // the fill until that clears (RN fields sometimes drop the first keystrokes right
 // after a scroll/transition); throw if it never takes rather than passing silently.
-async function fillField(
+export async function fillField(
   adb: Adb,
   resourceId: string,
   value: string,

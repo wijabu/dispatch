@@ -13,7 +13,7 @@ import {
   type FlowContext,
 } from "../../types";
 import { step, waitForNode } from "../post";
-import { setFacebookLocation, tapLabel } from "./post";
+import { fillField, setFacebookLocation, tapLabel } from "./post";
 
 // Reprice a live Facebook listing, hands-off: Seller Hub → Your listings → the
 // listing's "⋯" management menu → Edit listing → replace price → (re-set
@@ -62,14 +62,11 @@ export async function repriceFacebook(ctx: FlowContext): Promise<AndroidResult> 
     return resolveResult(t);
 
   if (
-    !(await step(adb, t, "set price", async () => {
-      const priceField = findByTestId(await adb.dumpUi(), facebookSelectors.priceField);
-      if (!priceField) throw new Error("edit price field not found");
-      await adb.tapNode(priceField);
-      await adb.clearText();
-      await new Promise((r) => setTimeout(r, 200));
-      await adb.typeText(String(ctx.newPrice));
-    }))
+    !(await step(adb, t, "set price", () =>
+      // Required-field verify: retries until the price field clears its "error"
+      // content-desc, so a dropped keystroke can't silently leave the old price.
+      fillField(adb, facebookSelectors.priceField, String(ctx.newPrice), true)
+    ))
   )
     return resolveResult(t);
 
