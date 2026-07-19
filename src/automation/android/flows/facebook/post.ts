@@ -79,16 +79,36 @@ export async function setFacebookLocation(adb: Adb): Promise<void> {
   );
 }
 
-async function fillField(adb: Adb, resourceId: string, value: string): Promise<void> {
-  const field = findByTestId(await adb.dumpUi(), resourceId);
-  if (!field) throw new Error(`field not found: ${resourceId}`);
-  await adb.tapNode(field);
-  // Facebook auto-saves the composer as a draft and "One item" silently resumes
-  // it, so a field may already hold text from an abandoned post. Clear before
-  // typing or the new value concatenates onto the old (e.g. price 40 → 4040).
-  await adb.clearText();
-  await new Promise((r) => setTimeout(r, 200));
-  await adb.typeText(value);
+// Fill a composer field (tap → clear → type). Facebook auto-saves the composer
+// as a draft and "One item" silently resumes it, so a field may already hold text
+// from an abandoned post — always clear first or the new value concatenates onto
+// the old (e.g. price 40 → 4040).
+//
+// The composer hides a field's text (the node's `text` stays "" even when filled),
+// so a typed value that doesn't land can't be seen directly. But a REQUIRED field
+// exposes its validation in content-desc: "<Field>, , error, Enter a … to continue."
+// while empty, and drops the "error" once it holds a value. When `required`, retry
+// the fill until that clears (RN fields sometimes drop the first keystrokes right
+// after a scroll/transition); throw if it never takes rather than passing silently.
+async function fillField(
+  adb: Adb,
+  resourceId: string,
+  value: string,
+  required = false
+): Promise<void> {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const field = findByTestId(await adb.dumpUi(), resourceId);
+    if (!field) throw new Error(`field not found: ${resourceId}`);
+    await adb.tapNode(field);
+    await adb.clearText();
+    await new Promise((r) => setTimeout(r, 200));
+    await adb.typeText(value);
+    await new Promise((r) => setTimeout(r, 700));
+    if (!required) return;
+    const after = findByTestId(await adb.dumpUi(), resourceId);
+    if (!after || !after.contentDesc.includes("error")) return;
+  }
+  throw new Error(`field ${resourceId} did not accept its value (still flagged empty)`);
 }
 
 export async function postFacebook(
@@ -239,7 +259,7 @@ export async function postFacebook(
   // 5. Title / price / description.
   if (
     !(await step(adb, t, "fill title", () =>
-      fillField(adb, facebookSelectors.titleField, ctx.listing.title)
+      fillField(adb, facebookSelectors.titleField, ctx.listing.title, true)
     ))
   )
     return resolveResult(t);
@@ -248,7 +268,7 @@ export async function postFacebook(
   if (
     !(await step(adb, t, "fill price", async () => {
       if (price == null) throw new Error("no price set");
-      await fillField(adb, facebookSelectors.priceField, String(price));
+      await fillField(adb, facebookSelectors.priceField, String(price), true);
     }))
   )
     return resolveResult(t);
