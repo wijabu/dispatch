@@ -47,6 +47,11 @@ async function fillField(adb: Adb, resourceId: string, value: string): Promise<v
   const field = findByTestId(await adb.dumpUi(), resourceId);
   if (!field) throw new Error(`field not found: ${resourceId}`);
   await adb.tapNode(field);
+  // Facebook auto-saves the composer as a draft and "One item" silently resumes
+  // it, so a field may already hold text from an abandoned post. Clear before
+  // typing or the new value concatenates onto the old (e.g. price 40 → 4040).
+  await adb.clearText();
+  await new Promise((r) => setTimeout(r, 200));
   await adb.typeText(value);
 }
 
@@ -175,6 +180,9 @@ export async function postFacebook(
         500,
         "composer after photos"
       );
+      // The composer isn't immediately interactive after the gallery transition;
+      // the FIRST field (title) tapped too soon loses its clear+type. Settle.
+      await new Promise((r) => setTimeout(r, 1500));
     }))
   )
     return resolveResult(t);
