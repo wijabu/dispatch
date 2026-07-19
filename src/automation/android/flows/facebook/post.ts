@@ -111,9 +111,25 @@ export async function postFacebook(
     !(await step(adb, t, "select photos", async () => {
       if (ctx.photoPaths.length === 0) return;
       await tapLabel(adb, facebookSelectors.addPhotos);
-      // The picker shows gallery tiles newest-first; select ctx.photoPaths.length
-      // of them, then confirm (Add/Done). Confirmed live in Task 6 acceptance.
-      await waitForNode(adb, (n) => n.find((x) => /gallery|photo|image/i.test(x.testId)), 15000, 500, "photo picker");
+      // Android's system photo picker opens with gallery tiles newest-first
+      // (the pushed fb_*.jpg are newest). Select ctx.photoPaths.length of them,
+      // then tap the confirm button ("Allow (N)" / "Add (N)").
+      await waitForNode(adb, (n) => findByTestId(n, facebookSelectors.photoTile), 15000, 500, "photo picker");
+      const tiles = (await adb.dumpUi())
+        .filter((n) => n.testId === facebookSelectors.photoTile)
+        .slice(0, ctx.photoPaths.length);
+      for (const tile of tiles) {
+        await adb.tapNode(tile);
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      const confirm = await waitForNode(
+        adb,
+        (n) => findByTestId(n, facebookSelectors.photoConfirm),
+        10000,
+        500,
+        "photo confirm button"
+      );
+      await adb.tapNode(confirm);
     }))
   )
     return resolveResult(t);

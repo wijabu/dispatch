@@ -31,6 +31,10 @@ export const facebookSelectors = {
   priceField: "composer_v3_price",
   descriptionField: "composer_v3_description",
   addPhotos: "Add photos", // content-desc / text on the photo tile
+  // Android system photo picker (opens on Add photos). Select tiles, then the
+  // confirm button ("Allow (N)" scoped-access / "Add (N)"). Captured live.
+  photoTile: "com.google.android.providers.media.module:id/icon_thumbnail",
+  photoConfirm: "com.google.android.providers.media.module:id/button_add",
   publish: "Publish", // bottom of composer (final submit — review-gated)
   // Seller Hub maintenance surfaces (reprice/relist). Labels below are the
   // Facebook UI strings; their exact nodes are confirmed during live acceptance.
