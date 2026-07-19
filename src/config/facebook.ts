@@ -49,9 +49,15 @@ export const facebookSelectors = {
   // Seller Hub maintenance surfaces (reprice/relist). Labels below are the
   // Facebook UI strings; their exact nodes are confirmed during live acceptance.
   yourListings: "Your listings",
-  editListing: "Edit listing",
-  renewListing: "Renew",
-  deleteListing: "Delete",
+  // Each listing card exposes a "⋯" management menu (content-desc
+  // "Open management menu for <title>"); its sheet holds Edit/Delete/etc. Match
+  // by the full per-card content-desc so duplicate titles stay distinguishable.
+  manageMenuPrefix: "Open management menu for ", // + exact listing title
+  editListing: "Edit listing", // menu item → opens the composer in edit mode
+  saveEdit: "Save", // edit composer's save control (NOT "Publish")
+  renewListing: "Renew", // menu item — only present on aging listings (UNVERIFIED)
+  deleteListing: "Delete listing", // menu item → opens the delete confirm sheet
+  deleteConfirm: "Delete", // confirm sheet's Delete button
   markSold: "Mark as sold",
 } as const;
 

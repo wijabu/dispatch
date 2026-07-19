@@ -30,7 +30,7 @@ import { step, waitForNode } from "../post";
 // category step. Selector names live in src/config/facebook.ts.
 
 // A node whose text OR content-desc contains the label (FB reuses both).
-function findByLabel(nodes: UiNode[], label: string): UiNode | undefined {
+export function findByLabel(nodes: UiNode[], label: string): UiNode | undefined {
   return (
     nodes.find((n) => n.text === label || n.contentDesc === label) ??
     findByTextContains(nodes, label) ??
@@ -38,9 +38,45 @@ function findByLabel(nodes: UiNode[], label: string): UiNode | undefined {
   );
 }
 
-async function tapLabel(adb: Adb, label: string, timeoutMs = 15000): Promise<void> {
+export async function tapLabel(adb: Adb, label: string, timeoutMs = 15000): Promise<void> {
   const node = await waitForNode(adb, (n) => findByLabel(n, label), timeoutMs, 500, label);
   await adb.tapNode(node);
+}
+
+// Set the selling location via the "Add location" map picker. Requires location
+// permission + a live GPS fix (pinned to FACEBOOK_LOCATION before launch). Tapping
+// the Location field opens the picker; "Refresh your location" snaps the marker to
+// the GPS pin and "Apply" sets it (the field then reads "Location, <zip>"). Shared
+// by the post and reprice flows (editing a listing re-triggers the location gate).
+export async function setFacebookLocation(adb: Adb): Promise<void> {
+  await adb.shell(["input", "keyevent", "111"]); // hide keyboard
+  await new Promise((r) => setTimeout(r, 400));
+  let field: UiNode | undefined;
+  for (let a = 0; a < 6 && !field; a++) {
+    field = (await adb.dumpUi()).find((x) =>
+      x.contentDesc.startsWith(facebookSelectors.locationField)
+    );
+    if (field) break;
+    await adb.shell(["input", "swipe", "540", "1500", "540", "700", "250"]);
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  if (!field) throw new Error("location field not found");
+  await adb.tapNode(field);
+  await tapLabel(adb, facebookSelectors.locationRefresh, 15000);
+  await new Promise((r) => setTimeout(r, 3000));
+  await tapLabel(adb, facebookSelectors.locationApply, 10000);
+  await waitForNode(
+    adb,
+    (n) =>
+      n.find(
+        (x) =>
+          x.contentDesc.startsWith(facebookSelectors.locationField) &&
+          !x.contentDesc.includes("error")
+      ),
+    15000,
+    500,
+    "location resolved"
+  );
 }
 
 async function fillField(adb: Adb, resourceId: string, value: string): Promise<void> {
@@ -255,44 +291,7 @@ export async function postFacebook(
   // the ZIP, e.g. "Location, 32779"). REQUIRES a live GPS fix — if the emulator
   // reports no location the picker can't resolve and this step fails (surfacing
   // the problem rather than silently reaching the gate with location unset).
-  if (
-    !(await step(adb, t, "set location", async () => {
-      await adb.shell(["input", "keyevent", "111"]); // hide keyboard
-      await new Promise((r) => setTimeout(r, 400));
-      let field: UiNode | undefined;
-      for (let a = 0; a < 6 && !field; a++) {
-        field = (await adb.dumpUi()).find((x) =>
-          x.contentDesc.startsWith(facebookSelectors.locationField)
-        );
-        if (field) break;
-        // Location sits below the chips/description — scroll the form up to reveal it.
-        await adb.shell(["input", "swipe", "540", "1500", "540", "700", "250"]);
-        await new Promise((r) => setTimeout(r, 500));
-      }
-      if (!field) throw new Error("location field not found");
-      await adb.tapNode(field);
-      // Map picker: snap the marker to the pinned GPS, let it recenter, then Apply.
-      await tapLabel(adb, facebookSelectors.locationRefresh, 15000);
-      await new Promise((r) => setTimeout(r, 3000));
-      await tapLabel(adb, facebookSelectors.locationApply, 10000);
-      // Confirm the location resolved: the field's content-desc goes from
-      // "Location, , error, …" to "Location, <zip>, …". (The composer returns
-      // scrolled to this field, so the title field up top may be recycled out of
-      // view — check the location field itself, not the title.)
-      await waitForNode(
-        adb,
-        (n) =>
-          n.find(
-            (x) =>
-              x.contentDesc.startsWith(facebookSelectors.locationField) &&
-              !x.contentDesc.includes("error")
-          ),
-        15000,
-        500,
-        "location resolved"
-      );
-    }))
-  )
+  if (!(await step(adb, t, "set location", () => setFacebookLocation(adb))))
     return resolveResult(t);
 
   // 7. Submit only when explicitly told to (relist repost path). A genuinely new
