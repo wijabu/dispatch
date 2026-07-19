@@ -1,6 +1,6 @@
 import type { Condition } from "@/db/schema";
 import { ANDROID } from "@/config/android";
-import { facebookSelectors, CONDITION_MAP } from "@/config/facebook";
+import { facebookSelectors, CONDITION_MAP, FACEBOOK_LOCATION } from "@/config/facebook";
 import {
   Adb,
   findByContentDesc,
@@ -67,6 +67,13 @@ export async function postFacebook(
   // (launchFacebook force-stops first) to avoid the running-app restart.
   await adb.shell(["pm", "grant", "com.facebook.katana", "android.permission.READ_MEDIA_IMAGES"]);
   await adb.shell(["pm", "grant", "com.facebook.katana", "android.permission.READ_MEDIA_VIDEO"]);
+  // Facebook Marketplace REQUIRES device location to publish (no manual city
+  // entry). Grant location permission and pin the emulator's GPS to the selling
+  // area so the composer resolves a selling city. Grant while stopped (launch
+  // force-stops first); pin geo before launch so it's live when the app reads it.
+  await adb.shell(["pm", "grant", "com.facebook.katana", "android.permission.ACCESS_FINE_LOCATION"]);
+  await adb.shell(["pm", "grant", "com.facebook.katana", "android.permission.ACCESS_COARSE_LOCATION"]);
+  await adb.geoFix(FACEBOOK_LOCATION.lon, FACEBOOK_LOCATION.lat);
   await launchFacebook(adb);
   if (await isFacebookLoggedOut(adb)) return { status: "login_required" };
   await ensureAdbKeyboard(adb);
@@ -237,6 +244,34 @@ export async function postFacebook(
       // can't be verified here; the held press is what makes it stick.)
       const [cx, cy] = chip.center;
       await adb.shell(["input", "swipe", String(cx), String(cy), String(cx), String(cy), "150"]);
+    }))
+  )
+    return resolveResult(t);
+
+  // 6b. Location — location permission + pinned GPS (FACEBOOK_LOCATION) are set
+  // before launch; tapping the Location field triggers Facebook to resolve the
+  // pinned coordinates to a selling city and clear the required-field error.
+  // Best-effort: a miss here still reaches the review gate (the exact picker
+  // confirm, if one is needed, is finalized during live acceptance), so this
+  // step never throws.
+  if (
+    !(await step(adb, t, "set location", async () => {
+      await adb.shell(["input", "keyevent", "111"]); // hide keyboard
+      await new Promise((r) => setTimeout(r, 400));
+      let field: UiNode | undefined;
+      for (let a = 0; a < 6 && !field; a++) {
+        field = (await adb.dumpUi()).find((x) =>
+          x.contentDesc.startsWith(facebookSelectors.locationField)
+        );
+        if (field) break;
+        // Location sits below the chips/description — scroll the form up to reveal it.
+        await adb.shell(["input", "swipe", "540", "1500", "540", "700", "250"]);
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      if (field) {
+        await adb.tapNode(field);
+        await new Promise((r) => setTimeout(r, 3000)); // let FB resolve the pinned GPS
+      }
     }))
   )
     return resolveResult(t);

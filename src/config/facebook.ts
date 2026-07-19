@@ -42,6 +42,7 @@ export const facebookSelectors = {
   // attach photos to the composer. Do not use it. Grant, don't revoke.)
   photoTilePrefix: "camera_roll_image_", // + index (0-based, newest-first)
   photoConfirm: "marketplace_camera_roll_android_next_button", // "Next"
+  locationField: "Location,", // content-desc of the selling-location field (prefix)
   publish: "Publish", // bottom of composer (final submit — review-gated)
   // Seller Hub maintenance surfaces (reprice/relist). Labels below are the
   // Facebook UI strings; their exact nodes are confirmed during live acceptance.
@@ -50,6 +51,17 @@ export const facebookSelectors = {
   renewListing: "Renew",
   deleteListing: "Delete",
   markSold: "Mark as sold",
+} as const;
+
+// Selling location. Facebook Marketplace REQUIRES device Location Services to
+// publish — there is no manual city-entry field. The post flow grants location
+// permission and pins the emulator's GPS to these coordinates so the composer
+// resolves to this area. Coordinates: ZIP 32779 (Longwood, FL) — Wil's selling
+// area. Change the ZIP by changing lon/lat (a ZIP-centroid lookup).
+export const FACEBOOK_LOCATION = {
+  lon: -81.4109,
+  lat: 28.6989,
+  label: "Longwood, FL 32779",
 } as const;
 
 // Facebook's condition chips (captured live). Dispatch's finer condition scale
