@@ -55,20 +55,18 @@ export async function postFacebook(
   opts: { autoSubmit?: boolean } = {}
 ): Promise<AndroidResult> {
   const adb = await ensureBooted();
+  // Grant media permission BEFORE launch so "Add photos" opens Facebook's own
+  // in-app gallery (indexed camera_roll_image_* tiles → clean, newest-first)
+  // rather than Android's scoped-access grant picker, which only widens FB's
+  // media access and never attaches photos to the composer. Grant while stopped
+  // (launchFacebook force-stops first) to avoid the running-app restart.
+  await adb.shell(["pm", "grant", "com.facebook.katana", "android.permission.READ_MEDIA_IMAGES"]);
+  await adb.shell(["pm", "grant", "com.facebook.katana", "android.permission.READ_MEDIA_VIDEO"]);
   await launchFacebook(adb);
   if (await isFacebookLoggedOut(adb)) return { status: "login_required" };
   await ensureAdbKeyboard(adb);
 
   const t = newTracker();
-
-  // 1. Pre-grant media perms so a runtime dialog can't interrupt the picker.
-  if (
-    !(await step(adb, t, "grant media permissions", async () => {
-      await adb.shell(["pm", "grant", "com.facebook.katana", "android.permission.READ_MEDIA_IMAGES"]);
-      await adb.shell(["pm", "grant", "com.facebook.katana", "android.permission.READ_MEDIA_VIDEO"]);
-    }))
-  )
-    return resolveResult(t);
 
   // 2. Push this item's photos into the gallery (primary first), clearing any
   // stale fb_*.jpg from a prior run, and media-scan each.
@@ -90,8 +88,23 @@ export async function postFacebook(
   // 3. Navigate Marketplace → Sell → Create listing → One item → composer.
   if (
     !(await step(adb, t, "open composer", async () => {
+      // Cold-started FB can swallow the first VIEW intent while still
+      // initializing (slow on emulated networks). Fire the marketplace deep link,
+      // and if the Sell tab hasn't appeared, re-fire it once before the long wait.
       await adb.shell(["am", "start", "-a", "android.intent.action.VIEW", "-d", "fb://marketplace"]);
-      await tapLabel(adb, facebookSelectors.sellTab);
+      const sellUp = await waitForNode(
+        adb,
+        (n) => findByLabel(n, facebookSelectors.sellTab),
+        12000,
+        500,
+        facebookSelectors.sellTab
+      ).catch(() => null);
+      if (!sellUp) {
+        await adb.shell(["am", "start", "-a", "android.intent.action.VIEW", "-d", "fb://marketplace"]);
+        await tapLabel(adb, facebookSelectors.sellTab, 30000);
+      } else {
+        await adb.tapNode(sellUp);
+      }
       await tapLabel(adb, facebookSelectors.createListing);
       await tapLabel(adb, facebookSelectors.oneItem);
       await waitForNode(
@@ -105,31 +118,48 @@ export async function postFacebook(
   )
     return resolveResult(t);
 
-  // 4. Attach photos (Add photos → gallery picker → select newest tiles →
-  // confirm). Picker-confirm selectors are finalized during live acceptance.
+  // 4. Attach photos: Add photos → FB in-app gallery → tap the newest N tiles
+  // (camera_roll_image_0..N-1, the just-pushed fb_*.jpg) → "Next" → the composer
+  // returns with the photos attached. Selectors captured live 2026-07-19.
   if (
     !(await step(adb, t, "select photos", async () => {
-      if (ctx.photoPaths.length === 0) return;
+      const count = ctx.photoPaths.length;
+      if (count === 0) return;
       await tapLabel(adb, facebookSelectors.addPhotos);
-      // Android's system photo picker opens with gallery tiles newest-first
-      // (the pushed fb_*.jpg are newest). Select ctx.photoPaths.length of them,
-      // then tap the confirm button ("Allow (N)" / "Add (N)").
-      await waitForNode(adb, (n) => findByTestId(n, facebookSelectors.photoTile), 15000, 500, "photo picker");
-      const tiles = (await adb.dumpUi())
-        .filter((n) => n.testId === facebookSelectors.photoTile)
-        .slice(0, ctx.photoPaths.length);
-      for (const tile of tiles) {
-        await adb.tapNode(tile);
-        await new Promise((r) => setTimeout(r, 500));
-      }
-      const confirm = await waitForNode(
+      // Wait for the in-app gallery (tile index 0 = newest = our primary photo).
+      await waitForNode(
         adb,
-        (n) => findByTestId(n, facebookSelectors.photoConfirm),
+        (n) => findByTestId(n, `${facebookSelectors.photoTilePrefix}0`),
+        15000,
+        500,
+        "in-app gallery"
+      );
+      // Tap tiles newest-first. A missing index means the gallery has fewer
+      // tiles than photos pushed — attach what's there and stop.
+      for (let i = 0; i < count; i++) {
+        const tile = findByTestId(await adb.dumpUi(), `${facebookSelectors.photoTilePrefix}${i}`);
+        if (!tile) break;
+        await adb.tapNode(tile);
+        await new Promise((r) => setTimeout(r, 400));
+      }
+      // "Next" (marketplace_camera_roll_android_next_button, content-desc "Next")
+      // confirms the selection and returns to the composer.
+      const next = await waitForNode(
+        adb,
+        (n) => findByTestId(n, facebookSelectors.photoConfirm) ?? findByContentDesc(n, "Next"),
         10000,
         500,
-        "photo confirm button"
+        "photo Next button"
       );
-      await adb.tapNode(confirm);
+      await adb.tapNode(next);
+      // Confirm we're back on the composer before filling fields.
+      await waitForNode(
+        adb,
+        (n) => findByTestId(n, facebookSelectors.titleField),
+        20000,
+        500,
+        "composer after photos"
+      );
     }))
   )
     return resolveResult(t);

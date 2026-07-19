@@ -31,10 +31,17 @@ export const facebookSelectors = {
   priceField: "composer_v3_price",
   descriptionField: "composer_v3_description",
   addPhotos: "Add photos", // content-desc / text on the photo tile
-  // Android system photo picker (opens on Add photos). Select tiles, then the
-  // confirm button ("Allow (N)" scoped-access / "Add (N)"). Captured live.
-  photoTile: "com.google.android.providers.media.module:id/icon_thumbnail",
-  photoConfirm: "com.google.android.providers.media.module:id/button_add",
+  // Facebook's OWN in-app gallery picker (opens on "Add photos" WHEN FB holds
+  // READ_MEDIA_IMAGES — grant it before launch). Tiles carry indexed
+  // resource-ids camera_roll_image_0, _1, _2 … newest-first, so the just-pushed
+  // fb_*.jpg are indices 0..N-1. Confirm with the "Next" button, which returns
+  // to the composer with the photos attached. Captured live 2026-07-19.
+  //
+  // (The revoke-permission path routes to Android's PhotoPickerUserSelectActivity
+  // — a scoped-ACCESS *grant* picker that widens FB's media access but does NOT
+  // attach photos to the composer. Do not use it. Grant, don't revoke.)
+  photoTilePrefix: "camera_roll_image_", // + index (0-based, newest-first)
+  photoConfirm: "marketplace_camera_roll_android_next_button", // "Next"
   publish: "Publish", // bottom of composer (final submit — review-gated)
   // Seller Hub maintenance surfaces (reprice/relist). Labels below are the
   // Facebook UI strings; their exact nodes are confirmed during live acceptance.
