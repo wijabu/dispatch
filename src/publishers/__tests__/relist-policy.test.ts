@@ -26,12 +26,11 @@ describe("relist policies (researched July 2026, see v1.1 spec)", () => {
     });
   });
 
-  it("facebook: renew weekly, fresh relist after 42 days", () => {
+  it("facebook: renew-only weekly (no fresh repost — FB blocks duplicate photos)", () => {
     expect(getPublisher("facebook")?.relistPolicy).toEqual({
       method: "renew-then-repost",
       intervalDays: 7,
       minIntervalDays: 7,
-      freshRelistAfterDays: 42,
     });
   });
 

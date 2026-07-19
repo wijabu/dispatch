@@ -284,12 +284,10 @@ export async function relistOnFacebook(
   const item = await getItem(itemId);
   if (!item) return { status: "failed", step: "load", reason: "Item not found" };
 
-  // Facebook policy: renew every 7 days, fresh repost after 42. Pick the action
-  // from the listing's age (freshRelistAfterDays = 42 in the publisher policy).
-  const listingRow = item.listings.find((l) => l.id === listingId);
-  const listedAt = listingRow ? new Date(listingRow.listedAt.replace(" ", "T")) : new Date();
-  const ageDays = Math.floor((Date.now() - listedAt.getTime()) / 86_400_000);
-  const action: "renew" | "relist" = ageDays >= 42 ? "relist" : "renew";
+  // Facebook policy is renew-only: native Renew keeps the listing fresh, and a
+  // fresh repost is impossible (FB blocks a duplicate main photo while the old
+  // listing is live). Always renew; never repost.
+  const action: "renew" | "relist" = "renew";
 
   const { photos, listings: _l, prices: _p, ...itemRow } = item;
   const listing = getPublisher("facebook")!.generate(itemRow, photos);

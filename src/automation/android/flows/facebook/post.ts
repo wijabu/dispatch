@@ -215,6 +215,12 @@ export async function postFacebook(
         "photo Next button"
       );
       await adb.tapNode(next);
+      // Facebook intermittently shows a "Save time and list with Meta AI" promo
+      // sheet after photos attach; it sits over the composer and blocks the wait
+      // below. Dismiss it ("Not now") if present.
+      await new Promise((r) => setTimeout(r, 1500));
+      const notNow = findByLabel(await adb.dumpUi(), "Not now");
+      if (notNow) await adb.tapNode(notNow);
       // Confirm we're back on the composer before filling fields.
       await waitForNode(
         adb,
