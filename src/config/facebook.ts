@@ -14,7 +14,9 @@ export const FACEBOOK_AUTOMATION_ENABLED = true;
 
 // Gates the "Post to Facebook" button until the post flow is hardened +
 // live-verified. Reprice/relist are unaffected. (Mirrors OFFERUP_POST_ENABLED.)
-export const FACEBOOK_POST_ENABLED = false;
+// Flipped on 2026-07-19: post fill → review gate is live-verified (photos, title,
+// price, description, condition, location) and a real listing published end-to-end.
+export const FACEBOOK_POST_ENABLED = true;
 
 // Selectors captured live from the Facebook app (2026-07-18). Marketplace →
 // Sell → Create listing → One item → composer. The one-item composer exposes
