@@ -223,14 +223,20 @@ export async function postFacebook(
       await new Promise((r) => setTimeout(r, 500));
       let chip: UiNode | undefined;
       for (let a = 0; a < 6 && !chip; a++) {
-        chip = (await adb.dumpUi()).find((x) => x.text === label);
+        // The clickable target is a Button exposing the label via content-desc
+        // (its text child is a non-clickable ViewGroup); match either.
+        chip = (await adb.dumpUi()).find((x) => x.contentDesc === label || x.text === label);
         if (chip) break;
         // Swipe finger downward → scroll the form up → reveal the chip row above.
         await adb.shell(["input", "swipe", "540", "800", "540", "1500", "250"]);
         await new Promise((r) => setTimeout(r, 600));
       }
       if (!chip) throw new Error(`condition "${label}" not found`);
-      await adb.tapNode(chip);
+      // FB's RN chip ignores an instantaneous tap — press with a short hold.
+      // (Selection isn't reflected in the node's `selected` attribute, so it
+      // can't be verified here; the held press is what makes it stick.)
+      const [cx, cy] = chip.center;
+      await adb.shell(["input", "swipe", String(cx), String(cy), String(cx), String(cy), "150"]);
     }))
   )
     return resolveResult(t);
