@@ -25,14 +25,20 @@ export async function fillCraigslistForm(
   await tryStep(t, "description", () =>
     page.fill("#PostingBody, textarea[name='PostingBody']", ctx.listing.body)
   );
-  // Condition dropdown (required, red until set). Select by visible label so we
-  // don't depend on CL's internal option values. Best-effort selector — live
-  // acceptance tunes it if CL renames the control.
+  // Condition (required, red until set). CL hides the native <select> behind a
+  // jQuery UI selectmenu that its json-form framework actually listens to —
+  // setting the hidden <select> is ignored (same trap as the category picker).
+  // Drive the widget: open the .ui-selectmenu-button.condition, click the option
+  // by label. Fall back to a plain <select> (classic form / test fixture).
   await tryStep(t, "condition", async () => {
-    await page.selectOption(
-      "select[name='condition'], #condition",
-      { label: craigslistCondition(ctx.item.condition) }
-    );
+    const label = craigslistCondition(ctx.item.condition);
+    const widget = page.locator(".ui-selectmenu-button.condition");
+    if (await widget.count()) {
+      await widget.first().click();
+      await page.getByRole("option", { name: label, exact: true }).first().click();
+    } else {
+      await page.selectOption("select[name='condition'], #condition", { label });
+    }
   });
   // Reply email (required, red until set). Fill only when configured in
   // .env.local (CRAIGSLIST_EMAIL); otherwise leave it for you to type.
