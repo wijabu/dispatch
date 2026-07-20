@@ -189,13 +189,54 @@ export const craigslistFill: FillScript = {
     });
 
     if (navigated) {
-      // Fill the details-page text fields and stop. We do NOT click continue/
-      // submit — that would violate "Dispatch never submits" and trip CL's
-      // validation. You pick condition, add photos on the next page, and post.
+      // Fill the details-page text fields.
       await fillCraigslistForm(page, ctx, t, {
         postal: STAGING.craigslistPostal,
         email: STAGING.craigslistEmail,
       });
+
+      // Then advance through the remaining pages and upload the photos, stopping
+      // BEFORE "done with images"/publish — you review the photos and post. Each
+      // "continue" is a full-page form submit; wait for the next page to load.
+      // Best-effort like the rest of the CL flow; a failure records and leaves
+      // the window wherever it got to.
+      const continueAndWait = async () => {
+        await page
+          .locator('button:has-text("continue"), button[type="submit"], input[name="go"]')
+          .first()
+          .click({ timeout: 8000 });
+        await page.waitForLoadState("load", { timeout: 15000 }).catch(() => {});
+      };
+
+      // details -> location (city/ZIP prefill from the ZIP we set).
+      await tryStep(t, "continue to location", () => continueAndWait());
+      // location -> images.
+      await tryStep(t, "continue to images", async () => {
+        await continueAndWait();
+        await page.waitForSelector(
+          'input[type="file"][accept*="image"], input[type="file"]',
+          { timeout: 15000 }
+        );
+      });
+      // Upload the item's photos to the image page (the file input is hidden
+      // behind CL's "Add Images" button; setInputFiles drives it directly).
+      if (ctx.photoPaths.length > 0) {
+        await tryStep(t, "upload images", async () => {
+          await page.setInputFiles(
+            'input[type="file"][accept*="image"], input[type="file"]',
+            ctx.photoPaths
+          );
+          // Uploads are async ("stay on this page while uploading"); wait for the
+          // count to reflect them before handing off. Don't fail the step if the
+          // text signal is missed — the upload has still been initiated.
+          await page
+            .waitForFunction(
+              () => /posting has [1-9]\d* image/i.test(document.body.innerText),
+              { timeout: 30000 }
+            )
+            .catch(() => {});
+        });
+      }
     }
 
     return resolveResult(t);
