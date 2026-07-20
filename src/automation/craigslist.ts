@@ -200,22 +200,35 @@ export const craigslistFill: FillScript = {
       // "continue" is a full-page form submit; wait for the next page to load.
       // Best-effort like the rest of the CL flow; a failure records and leaves
       // the window wherever it got to.
-      const continueAndWait = async () => {
-        await page
+      const continueBtn = () =>
+        page
           .locator('button:has-text("continue"), button[type="submit"], input[name="go"]')
-          .first()
-          .click({ timeout: 8000 });
-        await page.waitForLoadState("load", { timeout: 15000 }).catch(() => {});
-      };
+          .first();
 
-      // details -> location (city/ZIP prefill from the ZIP we set).
-      await tryStep(t, "continue to location", () => continueAndWait());
-      // location -> images.
+      // details -> location. Then let the location page FULLY settle before its
+      // continue is touched: it renders an async map (OSM tiles) + geocodes the
+      // ZIP after `load`, and clicking continue mid-render just no-ops (the page
+      // sits there). Wait for network idle + the map, plus a short settle so the
+      // continue handler is bound.
+      await tryStep(t, "continue to location", async () => {
+        await continueBtn().click({ timeout: 8000 });
+        await page.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
+        await page
+          .waitForSelector('.leaflet-container, #map, [class*="map"]', { timeout: 15000 })
+          .catch(() => {});
+        await page.waitForTimeout(1000);
+      });
+
+      // location -> images. Click a now-actionable continue, then wait for the
+      // image uploader (network idle covers the page swap + uploader init).
       await tryStep(t, "continue to images", async () => {
-        await continueAndWait();
+        const cont = continueBtn();
+        await cont.waitFor({ state: "visible", timeout: 12000 });
+        await cont.click({ timeout: 8000 });
+        await page.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
         await page.waitForSelector(
           'input[type="file"][accept*="image"], input[type="file"]',
-          { timeout: 15000 }
+          { timeout: 20000 }
         );
       });
       // Upload the item's photos to the image page (the file input is hidden
