@@ -222,10 +222,12 @@ export const craigslistFill: FillScript = {
       // getByRole matches <button>continue</button> and <input value="continue">
       // and never "find". Settle, click, settle, then wait for the image uploader.
       await tryStep(t, "continue to images", async () => {
-        const cont = page.getByRole("button", { name: /continue/i }).first();
+        // The real continue is <button class="continue bigbutton" type="submit">;
+        // target its own class so the (disabled) "find" submit can't shadow it.
+        const cont = page.locator("button.continue").first();
         await cont.waitFor({ state: "visible", timeout: 12000 });
         await page.waitForTimeout(1000);
-        console.log(`[fill] location continue count: ${await page.getByRole("button", { name: /continue/i }).count()}`);
+        console.log(`[fill] button.continue count: ${await page.locator("button.continue").count()}`);
         await cont.click({ timeout: 8000 });
         await page.waitForLoadState("load", { timeout: 20000 }).catch(() => {});
         await page.waitForTimeout(3000);
