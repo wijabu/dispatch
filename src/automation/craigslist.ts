@@ -1,14 +1,14 @@
 import type { Page } from "playwright";
 import type { FillContext, FillResult, FillScript } from "./types";
 import { looksLikeLoginWall, newTracker, resolveResult, tryStep, type StepTracker } from "./helpers";
-import { craigslistCategory, STAGING } from "@/config/staging";
+import { craigslistCategory, craigslistCondition, STAGING } from "@/config/staging";
 
 // Single-page form core — fixture-testable. Navigation lives in fill().
 export async function fillCraigslistForm(
   page: Page,
   ctx: FillContext,
   t: StepTracker,
-  opts: { postal: string }
+  opts: { postal: string; email: string }
 ): Promise<void> {
   // id first (fixture + legacy), then current name-based selector.
   await tryStep(t, "title", () =>
@@ -25,6 +25,22 @@ export async function fillCraigslistForm(
   await tryStep(t, "description", () =>
     page.fill("#PostingBody, textarea[name='PostingBody']", ctx.listing.body)
   );
+  // Condition dropdown (required, red until set). Select by visible label so we
+  // don't depend on CL's internal option values. Best-effort selector — live
+  // acceptance tunes it if CL renames the control.
+  await tryStep(t, "condition", async () => {
+    await page.selectOption(
+      "select[name='condition'], #condition",
+      { label: craigslistCondition(ctx.item.condition) }
+    );
+  });
+  // Reply email (required, red until set). Fill only when configured in
+  // .env.local (CRAIGSLIST_EMAIL); otherwise leave it for you to type.
+  if (opts.email) {
+    await tryStep(t, "email", () =>
+      page.fill("input[name='FromEMail'], #FromEMail, input[type='email']", opts.email)
+    );
+  }
   // Photos live on a later Craigslist page; only upload if a file input is on
   // THIS page (true for the fixture, not for the real details form). Skipping
   // when absent keeps it out of the failure list.
@@ -158,6 +174,7 @@ export const craigslistFill: FillScript = {
       // validation. You pick condition, add photos on the next page, and post.
       await fillCraigslistForm(page, ctx, t, {
         postal: STAGING.craigslistPostal,
+        email: STAGING.craigslistEmail,
       });
     }
 
