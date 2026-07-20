@@ -21,12 +21,13 @@ export const ANDROID = {
 // Flip on once live acceptance passes.
 export const OFFERUP_AUTOMATION_ENABLED = true;
 
-// The post flow works, but its category auto-select is only robust for simple
-// two-level categories (e.g. Home & Garden > Furniture); long/complex ones
-// (e.g. Business equipment > Office equipment & Supplies) don't reliably close
-// the picker. Keep the "Post to OfferUp" button hidden until that's hardened.
-// Reprice ("Sync price to OfferUp") is unaffected and stays live.
-export const OFFERUP_POST_ENABLED = false;
+// Post flow is live. Category auto-select uses the picker's "Search categories"
+// box (type the subcategory, tap the leaf matched by its full-path content-desc
+// "<sub>, <cat>"), which sidesteps the old fragile scroll-and-tap accordion and
+// works for both simple and bottom-of-list categories. Live-verified to the
+// review gate for Home & Garden > Furniture and Business equipment > Office
+// equipment & Supplies (2026-07-17).
+export const OFFERUP_POST_ENABLED = true;
 
 // Known testIDs captured live from the OfferUp RN app (2026-07-13, expanded
 // with the post/reprice flow selectors from the live-capture session). Central
@@ -40,8 +41,10 @@ export const offerupTestIds = {
   publicProfile: "account-screen.public-profile",
   listingByTitle: (title: string) => `ProfileListingItem.btn.${title}`,
   manageOwnItem: "ItemDetailScreenBottomBarManageOwnItemButton",
+  shareButton: "ItemDetailScreenHeaderShareButton", // opens the OS share sheet (listing URL as text)
   editPostLink: "item-dashboard-screen.edit-post-link",
   markSold: "item-dashboard-screen.mark-sold-button",
+  dashboardEllipses: "item-dashboard-screen.ellipses-button", // "⋯" overflow → Share / Archive sheet
   // Post/Edit composer — single-page form (Edit-post reuses this; confirm live)
   mediaSelectorButton: "MediaSelectorButton", // opens the CameraRoll bottom sheet
   titleField: "TitleField",
@@ -50,7 +53,10 @@ export const offerupTestIds = {
   categoryField: "CategoryField",
   conditionField: "ConditionField",
   locationField: "LocationField",
-  submitAction: "PostItemHeader.rightAction", // label becomes "Post" once valid; NEVER tap for a brand-new listing
+  // The real Post/submit control is a full-width content-desc="Post" button at
+  // the BOTTOM of the composer (found by scrolling), NOT this header node —
+  // PostItemHeader.rightAction is empty for a new listing. Kept for reference.
+  submitAction: "PostItemHeader.rightAction",
   // Photo picker (CameraRoll bottom sheet)
   photoTile: "CameraRollListMediaAssetItem", // one per gallery photo; newest first
   photoConfirm: "CameraRollFooterUploadButton", // confirms the selected tiles

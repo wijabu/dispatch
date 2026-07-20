@@ -6,7 +6,7 @@ import {
   offerupTestIds,
   OFFERUP_CONDITIONS,
 } from "@/config/android";
-import { Adb, findByTestId, type UiNode } from "../adb";
+import { Adb, findByContentDesc, findByTestId, type UiNode } from "../adb";
 import {
   ensureAdbKeyboard,
   ensureBooted,
@@ -43,7 +43,8 @@ export async function waitForNode(
   adb: Adb,
   find: (nodes: UiNode[]) => UiNode | undefined,
   timeoutMs = 15000,
-  intervalMs = 500
+  intervalMs = 500,
+  label = "UI element"
 ): Promise<UiNode> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
@@ -56,7 +57,7 @@ export async function waitForNode(
       node = undefined;
     }
     if (node) return node;
-    if (Date.now() >= deadline) throw new Error("timed out waiting for UI element");
+    if (Date.now() >= deadline) throw new Error(`timed out waiting for ${label}`);
     await new Promise((r) => setTimeout(r, intervalMs));
   }
 }
@@ -208,36 +209,75 @@ export async function postOfferup(
   const catName = ctx.item.offerupCategory;
   const subName = ctx.item.offerupSubcategory;
   if (catName && subName) {
+    // OfferUp's category picker is a long virtualized accordion; scrolling to
+    // and tapping a below-the-fold row is fragile (rows pinned against the
+    // system nav bar don't register a tap — this is what broke bottom-of-list
+    // categories like Business equipment > Office equipment & Supplies). Instead
+    // use the picker's built-in "Search categories" box: a typed query filters
+    // to a leaf row whose content-desc encodes the full path as "<sub>, <cat>",
+    // which we tap directly. No scrolling, and the parent path in the desc
+    // disambiguates same-named leaves (e.g. "Other - <category>").
+    // Both the picker's search-result leaf and the composer's category field
+    // render the selected path as an accessibility content-desc. Two-level
+    // categories show it as "<sub>, <cat>" exactly; match leniently (starts with
+    // the subcategory, contains the category) so a deeper-nested or extra-segment
+    // label can't silently miss and time out.
+    const matchesPath = (n: UiNode) =>
+      n.contentDesc.startsWith(`${subName},`) && n.contentDesc.includes(catName);
     if (
       !(await step(adb, t, "select category", async () => {
         const catField = findByTestId(await adb.dumpUi(), offerupTestIds.categoryField);
         if (!catField) throw new Error(`categoryField not found: ${offerupTestIds.categoryField}`);
         await adb.tapNode(catField);
         // picker opens
-        await waitForNode(adb, (nodes) => nodes.find((n) => n.text === "Select a category"));
-        // The category list is long and virtualized — uiautomator only dumps
-        // rendered rows, so scroll until the exact label appears (a static
-        // waitForNode would time out on any below-the-fold category/subcategory).
-        const scrollToText = async (label: string): Promise<void> => {
-          for (let i = 0; i < 10; i++) {
-            const node = (await adb.dumpUi()).find((n) => n.text === label);
-            if (node) {
-              await adb.tapNode(node);
-              return;
-            }
-            await adb.shell(["input", "swipe", "540", "1700", "540", "800", "250"]);
-            await new Promise((r) => setTimeout(r, 700));
-          }
-          throw new Error(`category option not found: ${label}`);
-        };
-        // tap the top-level to expand its subcategories, then the subcategory
-        await scrollToText(catName);
-        await scrollToText(subName);
-        // completion check: picker closed and we're back on the composer
-        await waitForNode(adb, (nodes) => findByTestId(nodes, offerupTestIds.titleField));
-        if ((await adb.dumpUi()).some((n) => n.text === "Select a category")) {
-          throw new Error("category picker did not close after selecting subcategory");
+        await waitForNode(
+          adb,
+          (nodes) => nodes.find((n) => n.text === "Select a category"),
+          15000,
+          500,
+          "category picker to open"
+        );
+        // focus the search box (its hint text is "Search categories") and type
+        // the subcategory name — a single-line query, so typeText sends no ENTER.
+        const search = await waitForNode(
+          adb,
+          (nodes) => nodes.find((n) => n.text === "Search categories"),
+          15000,
+          500,
+          "category search box"
+        );
+        await adb.tapNode(search);
+        await adb.typeText(subName);
+        // tap the filtered leaf, matched by its full-path content-desc
+        const result = await waitForNode(
+          adb,
+          (nodes) => nodes.find(matchesPath),
+          8000,
+          500,
+          `search result for "${subName}, ${catName}"`
+        );
+        await adb.tapNode(result);
+        // Dismiss the soft keyboard so it can't obscure the condition options
+        // below AND so its stale "Select a category" node clears from the tree —
+        // but only if the IME is actually showing, else BACK would pop the
+        // composer instead of the keyboard.
+        if ((await adb.shell(["dumpsys", "input_method"])).includes("mInputShown=true")) {
+          await adb.shell(["input", "keyevent", "4"]);
         }
+        // Completion: back on the composer (TitleField) with the category field
+        // showing the selected path and the picker closed.
+        await waitForNode(
+          adb,
+          (nodes) =>
+            findByTestId(nodes, offerupTestIds.titleField) &&
+            nodes.some(matchesPath) &&
+            !nodes.some((n) => n.text === "Select a category")
+              ? nodes[0]
+              : undefined,
+          8000,
+          500,
+          "category selection to apply"
+        );
       }))
     )
       return resolveResult(t);
@@ -259,14 +299,68 @@ export async function postOfferup(
     return resolveResult(t);
 
   // 8. Submit only when explicitly told to (relist path). A brand-new listing
-  // ALWAYS stops here so Wil taps Post himself — never tap submitAction
-  // otherwise.
+  // ALWAYS stops here so Wil taps Post himself — never tap Post otherwise.
   if (opts.autoSubmit) {
     if (
       !(await step(adb, t, "submit", async () => {
-        const submit = findByTestId(await adb.dumpUi(), offerupTestIds.submitAction);
-        if (!submit) throw new Error(`submitAction not found: ${offerupTestIds.submitAction}`);
+        // The Post button is a full-width content-desc="Post" control at the
+        // BOTTOM of the form (PostItemHeader.rightAction is an empty top-right
+        // node for a new listing, NOT the submit control). Hide the keyboard if
+        // it's up (BACK only when actually shown, else it pops the composer),
+        // then scroll down until Post is revealed and tap it.
+        if ((await adb.shell(["dumpsys", "input_method"])).includes("mInputShown=true")) {
+          await adb.shell(["input", "keyevent", "4"]);
+          await new Promise((r) => setTimeout(r, 600));
+        }
+        let submit = findByContentDesc(await adb.dumpUi(), "Post");
+        for (let i = 0; i < 6 && !submit; i++) {
+          await adb.shell(["input", "swipe", "540", "1700", "540", "800", "250"]);
+          await new Promise((r) => setTimeout(r, 700));
+          submit = findByContentDesc(await adb.dumpUi(), "Post");
+        }
+        if (!submit) throw new Error("Post button not found");
         await adb.tapNode(submit);
+        // Positive confirmation the listing went live: after a successful post
+        // OfferUp leaves the composer for one of two post-success screens — the
+        // "Posted!" confirmation, OR a full-screen paid "Promote" upsell for the
+        // item just posted ("Best value" / "Start 3 day free trial"). Either
+        // proves the listing was created; this is OfferUp's own signal, stronger
+        // than "the composer closed" (an under-review or error screen also closes
+        // it), which is what makes it safe for relist to archive the old listing
+        // next. NOTE: the "available to Premium members only for the next 30
+        // minutes" note affects only PUBLIC reach, not whether the post
+        // succeeded — so we confirm here and DON'T wait it out (and must NOT
+        // confirm by looking for the listing on the public profile, where the
+        // premium window would hide it for 30 min).
+        await waitForNode(
+          adb,
+          (nodes) =>
+            nodes.find(
+              (n) =>
+                n.text === "Posted!" ||
+                n.text === "Best value" ||
+                n.text === "Start 3 day free trial"
+            ),
+          25000,
+          1000,
+          "the post-success screen"
+        );
+        // After a successful post OfferUp shows a "Posted!" success/promote
+        // screen with a "Done" button and NO bottom tab bar. Tap "Done" to
+        // return to the main app (so later navigation can find the tab bar);
+        // fall back to BACK for any promote-upsell variant. Never touch the paid
+        // "Sell 2x faster"/"Promote" buttons.
+        for (let i = 0; i < 5; i++) {
+          const nodes = await adb.dumpUi().catch(() => [] as UiNode[]);
+          if (nodes.some((n) => n.testId.startsWith("tab-bar-widget"))) break; // back on main app
+          const done = nodes.find((n) => n.text === "Done" || n.contentDesc === "Done");
+          if (done) {
+            await adb.tapNode(done);
+          } else {
+            await adb.shell(["input", "keyevent", "4"]);
+          }
+          await new Promise((r) => setTimeout(r, 1200));
+        }
       }))
     )
       return resolveResult(t);

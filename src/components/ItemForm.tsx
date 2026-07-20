@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import type { Item } from "@/db/schema";
 import { CONDITIONS, VISIBLE_ITEM_STATUSES } from "@/db/schema";
@@ -371,6 +372,12 @@ export function ItemForm({
         >
           {item ? "Save changes" : "Create item"}
         </button>
+        <Link
+          href={item ? `/items/${item.id}` : "/"}
+          className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+        >
+          Cancel
+        </Link>
       </div>
     </form>
   );

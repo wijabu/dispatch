@@ -129,6 +129,12 @@ export class Adb {
   tapNode(n: UiNode) {
     return this.tap(n.center[0], n.center[1]);
   }
+  // Pins the emulator's GPS via the emulator console (`adb emu geo fix`). Order
+  // is longitude then latitude. Used to give Facebook Marketplace a fixed selling
+  // location without real device location.
+  geoFix(lon: number, lat: number) {
+    return this.exec(["emu", "geo", "fix", String(lon), String(lat)]);
+  }
   // Types via ADBKeyBoard (com.android.adbkeyboard/.AdbIME) so arbitrary
   // Unicode (bullets, curly quotes, em dashes, emoji) reaches the field
   // intact — plain `adb shell input text` chokes on non-ASCII. ADBKeyBoard's

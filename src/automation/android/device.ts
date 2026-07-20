@@ -1,6 +1,7 @@
 import { execFile, spawn } from "child_process";
 import { promisify } from "util";
 import { ANDROID } from "@/config/android";
+import { FACEBOOK } from "@/config/facebook";
 import { Adb } from "./adb";
 
 const run = promisify(execFile);
@@ -96,6 +97,41 @@ export async function isOfferupLoggedOut(adb: Adb): Promise<boolean> {
     await new Promise((r) => setTimeout(r, 1500));
   }
   return true;
+}
+
+// Launch the Facebook app on a clean home screen — cold-start (force-stop then
+// launch) for the same deterministic landing as launchOfferup. Facebook is
+// heavier, so allow a longer splash. The caller's polling login check absorbs it.
+export async function launchFacebook(adb: Adb): Promise<void> {
+  await adb.shell(["am", "force-stop", FACEBOOK.packageName]);
+  await adb.shell([
+    "monkey", "-p", FACEBOOK.packageName, "-c", "android.intent.category.LAUNCHER", "1",
+  ]);
+  await new Promise((r) => setTimeout(r, 7000));
+}
+
+// Facebook's logged-out screen shows a prominent "Log in" / "Create new account"
+// prompt. Poll (a single dump can catch the splash or transiently fail); once we
+// have a real dump, decide from it. Default to logged-IN if uncertain — a false
+// login_required would needlessly bail an otherwise-fine run, and a genuinely
+// logged-out session surfaces as a downstream failure with a screenshot.
+export async function isFacebookLoggedOut(adb: Adb): Promise<boolean> {
+  for (let i = 0; i < 8; i++) {
+    try {
+      const nodes = await adb.dumpUi();
+      if (nodes.length) {
+        return nodes.some(
+          (n) =>
+            /^(Log in|Log In|Create new account)$/.test(n.text) ||
+            /^(Log in|Create new account)$/.test(n.contentDesc)
+        );
+      }
+    } catch {
+      // transient dump failure — retry
+    }
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+  return false;
 }
 
 // Idempotent self-heal: makes sure ADBKeyBoard is the active IME before any

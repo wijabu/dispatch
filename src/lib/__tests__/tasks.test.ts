@@ -187,13 +187,13 @@ describe("computeTasks — relist", () => {
     expect(relist).toMatchObject({ publisherId: "facebook", action: "renew", ageDays: 9 });
   });
 
-  it("facebook: fresh relist once listing is 42+ days old", () => {
+  it("facebook: renew-only — still renews (never reposts) even when 42+ days old", () => {
     const item = makeItem(published);
     const listing = makeListing({
       publisher: "facebook", listedAt: "2026-05-20 12:00:00", renewedAt: "2026-07-01 12:00:00",
     });
     const tasks = computeTasks(inputs({ items: [item], activeListings: [listing] }));
-    expect(tasks.find((t) => t.type === "relist")).toMatchObject({ action: "relist" });
+    expect(tasks.find((t) => t.type === "relist")).toMatchObject({ action: "renew" });
   });
 
   it("recent renew suppresses even an old listing (unless fresh-relist due)", () => {

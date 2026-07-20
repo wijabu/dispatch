@@ -15,9 +15,17 @@ if curl -s -o /dev/null "$URL"; then
   exit 0
 fi
 
-# First run (or after a fresh clone): make a production build once.
-if [ ! -d ".next" ]; then
-  echo "First run — building Dispatch (about 30 seconds)…"
+# Build when there's no valid PRODUCTION build, or when the code changed since the
+# last one. A bare .next left by `next dev` isn't a production build — only a real
+# `next build` writes .next/BUILD_ID — so checking the directory alone isn't enough
+# (that gap caused a "Could not find a production build" failure once).
+needs_build() {
+  [ ! -f ".next/BUILD_ID" ] && return 0                                        # no prod build
+  [ -n "$(find src package.json next.config.ts -newer .next/BUILD_ID 2>/dev/null | head -1)" ] && return 0  # code changed since build
+  return 1
+}
+if needs_build; then
+  echo "Building Dispatch (about 30 seconds)…"
   npm run build || { echo "Build failed. Press any key to close."; read -n 1; exit 1; }
 fi
 

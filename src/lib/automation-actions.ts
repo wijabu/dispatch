@@ -9,12 +9,17 @@ import { getItem } from "@/lib/queries";
 import { getPublisher } from "@/publishers";
 import { getFillScript, type FillResult } from "@/automation";
 import { acquireFillLock, getBrowserContext, releaseFillLock } from "@/automation/browser";
-import { postOfferup, repriceOfferup, type AndroidResult } from "@/automation/android";
+import {
+  postOfferup, repriceOfferup, relistOfferup,
+  postFacebook, repriceFacebook, relistFacebook,
+  type AndroidResult,
+} from "@/automation/android";
 import { acquireAndroidLock, releaseAndroidLock } from "@/automation/android/device";
 import { AUTOFILL_CHANNELS, STAGING } from "@/config/staging";
 import { OFFERUP_AUTOMATION_ENABLED } from "@/config/android";
+import { FACEBOOK_AUTOMATION_ENABLED } from "@/config/facebook";
 import { stagePhotosCore } from "@/lib/staging-core";
-import { syncListingPriceCore } from "@/lib/task-actions";
+import { markListingRenewedCore, syncListingPriceCore } from "@/lib/task-actions";
 
 const run = promisify(execFile);
 const STAGING_ROOT = path.join(process.cwd(), "data", "staging");
@@ -164,6 +169,139 @@ export async function dropOfferupPrice(
       step: "unknown",
       reason: err instanceof Error ? err.message : "Unknown error",
     };
+  } finally {
+    releaseAndroidLock();
+  }
+  revalidatePath("/");
+  revalidatePath(`/items/${itemId}/publish`);
+  return result;
+}
+
+// Relist an item on OfferUp: post a fresh copy (auto-submit) then archive the
+// old listing (hands-off, post-first/delete-last). On success stamps the
+// ledger's renewedAt so the engine's relist cadence resets. Only fires once the
+// item is at its floor (the engine suppresses relist tasks until asking <= min).
+export async function relistOnOfferup(
+  itemId: number,
+  listingId: number
+): Promise<AndroidResult> {
+  if (!OFFERUP_AUTOMATION_ENABLED) {
+    return { status: "failed", step: "config", reason: "OfferUp automation is disabled" };
+  }
+  const item = await getItem(itemId);
+  if (!item) return { status: "failed", step: "load", reason: "Item not found" };
+
+  const { photos, listings: _l, prices: _p, ...itemRow } = item;
+  const listing = getPublisher("offerup")!.generate(itemRow, photos);
+  const photoPaths = photos.map((p) => path.join(PHOTOS_DIR, p.path));
+
+  if (!acquireAndroidLock()) {
+    return { status: "failed", step: "lock", reason: "another OfferUp automation is running" };
+  }
+  let result: AndroidResult;
+  try {
+    result = await relistOfferup({ listing, item: itemRow, photoPaths });
+    if (result.status === "done") {
+      await markListingRenewedCore(db, listingId, new Date());
+    }
+  } catch (err) {
+    result = {
+      status: "failed",
+      step: "unknown",
+      reason: err instanceof Error ? err.message : "Unknown error",
+    };
+  } finally {
+    releaseAndroidLock();
+  }
+  revalidatePath("/");
+  revalidatePath(`/items/${itemId}/publish`);
+  return result;
+}
+
+// ---- Facebook Marketplace (emulator FB app) — mirrors the OfferUp actions ----
+
+export async function postToFacebook(itemId: number): Promise<AndroidResult> {
+  if (!FACEBOOK_AUTOMATION_ENABLED) {
+    return { status: "failed", step: "config", reason: "Facebook automation is disabled" };
+  }
+  const item = await getItem(itemId);
+  if (!item) return { status: "failed", step: "load", reason: "Item not found" };
+  const { photos, listings: _l, prices: _p, ...itemRow } = item;
+  const listing = getPublisher("facebook")!.generate(itemRow, photos);
+  const photoPaths = photos.map((p) => path.join(PHOTOS_DIR, p.path));
+
+  if (!acquireAndroidLock()) {
+    return { status: "failed", step: "lock", reason: "another automation is running" };
+  }
+  try {
+    return await postFacebook({ listing, item: itemRow, photoPaths });
+  } catch (err) {
+    return { status: "failed", step: "unknown", reason: err instanceof Error ? err.message : "Unknown error" };
+  } finally {
+    releaseAndroidLock();
+  }
+}
+
+export async function dropFacebookPrice(
+  itemId: number,
+  listingId: number
+): Promise<AndroidResult> {
+  if (!FACEBOOK_AUTOMATION_ENABLED) {
+    return { status: "failed", step: "config", reason: "Facebook automation is disabled" };
+  }
+  const item = await getItem(itemId);
+  if (!item) return { status: "failed", step: "load", reason: "Item not found" };
+  if (item.askingPrice == null) {
+    return { status: "failed", step: "load", reason: "Item has no asking price" };
+  }
+  const { photos, listings: _l, prices: _p, ...itemRow } = item;
+  const listing = getPublisher("facebook")!.generate(itemRow, photos);
+
+  if (!acquireAndroidLock()) {
+    return { status: "failed", step: "lock", reason: "another automation is running" };
+  }
+  let result: AndroidResult;
+  try {
+    result = await repriceFacebook({ item: itemRow, listing, photoPaths: [], newPrice: item.askingPrice });
+    if (result.status === "done") await syncListingPriceCore(db, listingId);
+  } catch (err) {
+    result = { status: "failed", step: "unknown", reason: err instanceof Error ? err.message : "Unknown error" };
+  } finally {
+    releaseAndroidLock();
+  }
+  revalidatePath("/");
+  revalidatePath(`/items/${itemId}/publish`);
+  return result;
+}
+
+export async function relistOnFacebook(
+  itemId: number,
+  listingId: number
+): Promise<AndroidResult> {
+  if (!FACEBOOK_AUTOMATION_ENABLED) {
+    return { status: "failed", step: "config", reason: "Facebook automation is disabled" };
+  }
+  const item = await getItem(itemId);
+  if (!item) return { status: "failed", step: "load", reason: "Item not found" };
+
+  // Facebook policy is renew-only: native Renew keeps the listing fresh, and a
+  // fresh repost is impossible (FB blocks a duplicate main photo while the old
+  // listing is live). Always renew; never repost.
+  const action: "renew" | "relist" = "renew";
+
+  const { photos, listings: _l, prices: _p, ...itemRow } = item;
+  const listing = getPublisher("facebook")!.generate(itemRow, photos);
+  const photoPaths = photos.map((p) => path.join(PHOTOS_DIR, p.path));
+
+  if (!acquireAndroidLock()) {
+    return { status: "failed", step: "lock", reason: "another automation is running" };
+  }
+  let result: AndroidResult;
+  try {
+    result = await relistFacebook({ listing, item: itemRow, photoPaths }, { action });
+    if (result.status === "done") await markListingRenewedCore(db, listingId, new Date());
+  } catch (err) {
+    result = { status: "failed", step: "unknown", reason: err instanceof Error ? err.message : "Unknown error" };
   } finally {
     releaseAndroidLock();
   }

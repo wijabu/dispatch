@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatUsd, specLines, conditionLabel, commonWarnings } from "../helpers";
+import { formatUsd, specLines, conditionLabel, commonWarnings, formatDescription } from "../helpers";
 import { makeItem, makePhotos } from "./fixtures";
 
 describe("formatUsd", () => {
@@ -12,6 +12,48 @@ describe("formatUsd", () => {
   });
   it("returns null for null", () => {
     expect(formatUsd(null)).toBeNull();
+  });
+});
+
+describe("formatDescription", () => {
+  it("puts a blank line between sentences", () => {
+    expect(formatDescription("First sentence. Second sentence.")).toBe(
+      "First sentence.\n\nSecond sentence."
+    );
+  });
+
+  it("puts a blank line before each bullet", () => {
+    expect(formatDescription("Intro line • First bullet • Second bullet")).toBe(
+      "Intro line\n\n• First bullet\n\n• Second bullet"
+    );
+  });
+
+  it("does not split on decimals or inch-marks", () => {
+    expect(
+      formatDescription('Desktop is 23.6" wide and 47" long. It is sturdy.')
+    ).toBe('Desktop is 23.6" wide and 47" long.\n\nIt is sturdy.');
+  });
+
+  it("preserves blank-line breaks the author already made", () => {
+    expect(formatDescription("Heading line\n\nBody sentence.")).toBe(
+      "Heading line\n\nBody sentence."
+    );
+  });
+
+  it("leaves a single simple sentence unchanged", () => {
+    expect(formatDescription("A nice desk in great shape")).toBe(
+      "A nice desk in great shape"
+    );
+  });
+
+  it("collapses stray internal whitespace within a sentence", () => {
+    expect(formatDescription("Too    many   spaces here.")).toBe("Too many spaces here.");
+  });
+
+  it("returns an empty string for null/undefined/blank", () => {
+    expect(formatDescription(null)).toBe("");
+    expect(formatDescription(undefined)).toBe("");
+    expect(formatDescription("   ")).toBe("");
   });
 });
 

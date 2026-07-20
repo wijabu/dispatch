@@ -10,6 +10,10 @@ import {
   openForLogin,
   postToOfferup,
   dropOfferupPrice,
+  relistOnOfferup,
+  postToFacebook,
+  dropFacebookPrice,
+  relistOnFacebook,
   stageForFacebook,
 } from "@/lib/automation-actions";
 import type { FillResult } from "@/automation/types";
@@ -47,6 +51,8 @@ export function ChannelCard({
   note,
   offerupAutomation,
   offerupPostEnabled,
+  facebookAutomation,
+  facebookPostEnabled,
 }: {
   publisherId: string;
   publisherName: string;
@@ -61,12 +67,17 @@ export function ChannelCard({
   note?: string | null; // channel-specific hint
   offerupAutomation?: boolean; // OfferUp reprice ("Sync price") available
   offerupPostEnabled?: boolean; // OfferUp "Post" button shown (held back until category is robust)
+  facebookAutomation?: boolean; // Facebook reprice/relist available (kill switch)
+  facebookPostEnabled?: boolean; // Facebook "Post" button shown (held back until hardened)
 }) {
   const [expanded, setExpanded] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [fillResult, setFillResult] = useState<FillResult | null>(null);
   const [stageNote, setStageNote] = useState<string | null>(null);
   const [androidResult, setAndroidResult] = useState<AndroidResult | null>(null);
+  // Which OfferUp automation produced androidResult — the status line can't infer
+  // it from the result alone (relist and sync both run with a listing present).
+  const [offerupMode, setOfferupMode] = useState<"post" | "sync" | "relist">("post");
 
   function fillStatusLine(r: FillResult): string {
     switch (r.status) {
@@ -81,14 +92,15 @@ export function ChannelCard({
     }
   }
 
-  function offerupStatusLine(r: AndroidResult, mode: "post" | "sync"): string {
+  const androidChannel = publisherId === "facebook" ? "Facebook" : "OfferUp";
+  function offerupStatusLine(r: AndroidResult, mode: "post" | "sync" | "relist"): string {
     switch (r.status) {
       case "posted_review":
         return "Filled — review in the emulator, tap Post, then Mark listed.";
       case "done":
-        return mode === "post" ? "Posted ✓" : "Price synced ✓";
+        return mode === "post" ? "Posted ✓" : mode === "relist" ? "Relisted ✓" : "Price synced ✓";
       case "login_required":
-        return "Log into OfferUp in the emulator, then retry.";
+        return `Log into ${androidChannel} in the emulator, then retry.`;
       case "failed":
         return `Failed at ${r.step} (${r.reason}) — screenshot saved.`;
     }
@@ -174,6 +186,7 @@ export function ChannelCard({
                 startTransition(async () => {
                   setStageNote(null);
                   setAndroidResult(null);
+                  setOfferupMode("post");
                   setAndroidResult(await postToOfferup(itemId));
                 })
               }
@@ -190,6 +203,7 @@ export function ChannelCard({
                 startTransition(async () => {
                   setStageNote(null);
                   setAndroidResult(null);
+                  setOfferupMode("sync");
                   setAndroidResult(await dropOfferupPrice(itemId, listing.id));
                 })
               }
@@ -198,7 +212,75 @@ export function ChannelCard({
               {isPending ? "Syncing…" : "Sync price to OfferUp"}
             </button>
           )}
-          {stageTier === "facebook" && (
+          {offerupAutomation && listing && (
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() =>
+                startTransition(async () => {
+                  setStageNote(null);
+                  setAndroidResult(null);
+                  setOfferupMode("relist");
+                  setAndroidResult(await relistOnOfferup(itemId, listing.id));
+                })
+              }
+              className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isPending ? "Relisting…" : "Relist on OfferUp"}
+            </button>
+          )}
+          {facebookPostEnabled && !listing && (
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() =>
+                startTransition(async () => {
+                  setStageNote(null);
+                  setAndroidResult(null);
+                  setOfferupMode("post");
+                  setAndroidResult(await postToFacebook(itemId));
+                })
+              }
+              className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isPending ? "Posting…" : "Post to Facebook"}
+            </button>
+          )}
+          {facebookAutomation && listing && (
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() =>
+                startTransition(async () => {
+                  setStageNote(null);
+                  setAndroidResult(null);
+                  setOfferupMode("sync");
+                  setAndroidResult(await dropFacebookPrice(itemId, listing.id));
+                })
+              }
+              className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isPending ? "Syncing…" : "Sync price to Facebook"}
+            </button>
+          )}
+          {facebookAutomation && listing && (
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() =>
+                startTransition(async () => {
+                  setStageNote(null);
+                  setAndroidResult(null);
+                  setOfferupMode("relist");
+                  setAndroidResult(await relistOnFacebook(itemId, listing.id));
+                })
+              }
+              className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isPending ? "Relisting…" : "Relist on Facebook"}
+            </button>
+          )}
+          {stageTier === "facebook" && !listing && !facebookPostEnabled && (
             <button
               type="button"
               disabled={isPending}
@@ -293,7 +375,7 @@ export function ChannelCard({
       )}
       {androidResult && (
         <div className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
-          {offerupStatusLine(androidResult, listing ? "sync" : "post")}
+          {offerupStatusLine(androidResult, offerupMode)}
         </div>
       )}
       {stageNote && (
