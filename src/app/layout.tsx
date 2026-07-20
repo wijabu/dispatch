@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import { APP_VERSION } from "@/lib/version";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -31,8 +32,11 @@ export default function RootLayout({
       <body className="min-h-full bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
         <header className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
           <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-            <Link href="/" className="text-lg font-bold tracking-tight">
+            <Link href="/" className="flex items-baseline gap-2 text-lg font-bold tracking-tight">
               📦 Dispatch
+              <span className="text-xs font-normal text-zinc-400 dark:text-zinc-500">
+                v{APP_VERSION}
+              </span>
             </Link>
             <nav className="flex items-center gap-4">
               <Link
