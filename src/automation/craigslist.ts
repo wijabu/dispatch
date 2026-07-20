@@ -216,12 +216,16 @@ export const craigslistFill: FillScript = {
         console.log(`[fill] on location page: ${page.url()}`);
       });
 
-      // location -> images. Settle, click a visible continue, settle again, then
-      // wait for the image uploader.
+      // location -> images. Target continue BY NAME: the location page also has a
+      // "find" button (a submit) that the generic `.first()` selector was clicking
+      // instead of continue — which is why details advanced but location never did.
+      // getByRole matches <button>continue</button> and <input value="continue">
+      // and never "find". Settle, click, settle, then wait for the image uploader.
       await tryStep(t, "continue to images", async () => {
-        const cont = continueBtn();
+        const cont = page.getByRole("button", { name: /continue/i }).first();
         await cont.waitFor({ state: "visible", timeout: 12000 });
         await page.waitForTimeout(1000);
+        console.log(`[fill] location continue count: ${await page.getByRole("button", { name: /continue/i }).count()}`);
         await cont.click({ timeout: 8000 });
         await page.waitForLoadState("load", { timeout: 20000 }).catch(() => {});
         await page.waitForTimeout(3000);
