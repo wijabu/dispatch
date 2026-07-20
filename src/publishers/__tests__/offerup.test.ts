@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { offerup } from "../offerup";
+import { LOCAL_PICKUP_TERMS } from "../helpers";
 import { makeItem, makePhotos, deskOverrides } from "./fixtures";
 
 describe("offerup.generate", () => {
+  it("appends the local-pickup terms (OfferUp is local pickup)", () => {
+    expect(offerup.generate(makeItem(), makePhotos(3)).body).toContain(LOCAL_PICKUP_TERMS);
+  });
+
   it("uses the item name as title and provides structured fields", () => {
     const result = offerup.generate(makeItem(), makePhotos(3));
     expect(result.title).toBe("Rolex Explorer 124270");

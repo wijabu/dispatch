@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { craigslist } from "../craigslist";
+import { LOCAL_PICKUP_TERMS } from "../helpers";
 import { makeItem, makePhotos, deskOverrides } from "./fixtures";
 
 describe("craigslist.generate", () => {
+  it("appends the local-pickup terms (Craigslist is local pickup)", () => {
+    expect(craigslist.generate(makeItem(deskOverrides), makePhotos(2)).body).toContain(LOCAL_PICKUP_TERMS);
+  });
+
   it("builds title with price suffix", () => {
     const result = craigslist.generate(makeItem(deskOverrides), makePhotos(2));
     expect(result.title).toBe("IKEA Bekant Standing Desk - $120");

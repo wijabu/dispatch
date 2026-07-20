@@ -1,5 +1,5 @@
 import type { Publisher } from "./types";
-import { commonWarnings, conditionLabel, formatDescription, specLines } from "./helpers";
+import { commonWarnings, conditionLabel, formatDescription, LOCAL_PICKUP_TERMS, specLines } from "./helpers";
 
 const TITLE_LIMIT = 99;
 
@@ -18,7 +18,7 @@ export const facebookMarketplace: Publisher = {
       warnings.push(`Title exceeds Facebook's ${TITLE_LIMIT}-character limit (${item.name.length})`);
     }
     const specs = specLines(item);
-    const body = [formatDescription(item.description), `Condition: ${conditionLabel(item)}`, ...specs]
+    const body = [formatDescription(item.description), `Condition: ${conditionLabel(item)}`, ...specs, LOCAL_PICKUP_TERMS]
       .filter(Boolean)
       .join("\n");
     return {

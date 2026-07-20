@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { facebookMarketplace } from "../facebook";
+import { LOCAL_PICKUP_TERMS } from "../helpers";
 import { makeItem, makePhotos } from "./fixtures";
 
 describe("facebookMarketplace.generate", () => {
@@ -18,6 +19,11 @@ describe("facebookMarketplace.generate", () => {
     const result = facebookMarketplace.generate(makeItem(), makePhotos(3));
     expect(result.body).toContain("Excellent condition Explorer");
     expect(result.body).toContain("Diameter: 36mm");
+  });
+
+  it("appends the local-pickup terms (Facebook is local pickup)", () => {
+    const result = facebookMarketplace.generate(makeItem(), makePhotos(3));
+    expect(result.body).toContain(LOCAL_PICKUP_TERMS);
   });
 
   it("warns when the title exceeds 99 characters", () => {
