@@ -20,9 +20,13 @@ export async function tryStep(
   try {
     await fn();
     t.filled.push(name);
+    console.log(`[fill] ✓ ${name}`);
     return true;
-  } catch {
+  } catch (err) {
     t.failed.push(name);
+    // Surface WHY (visible in the app's terminal) — a swallowed error left us
+    // guessing which step broke and why on the flaky multi-page CL flow.
+    console.warn(`[fill] ✗ ${name}: ${(err as Error)?.message ?? err}`);
     return false;
   }
 }
