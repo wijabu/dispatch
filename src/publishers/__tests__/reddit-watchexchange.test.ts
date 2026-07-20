@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { redditWatchexchange } from "../reddit-watchexchange";
+import { LOCAL_PICKUP_TERMS } from "../helpers";
 import { makeItem, makePhotos, deskOverrides } from "./fixtures";
 
 describe("redditWatchexchange.generate", () => {
+  it("does NOT append local-pickup terms (shipped CONUS, not local)", () => {
+    expect(redditWatchexchange.generate(makeItem(), makePhotos(3)).body).not.toContain(LOCAL_PICKUP_TERMS);
+  });
+
   it("builds the [WTS] title with price and Box/Papers", () => {
     const result = redditWatchexchange.generate(makeItem(), makePhotos(3));
     expect(result.title).toBe("[WTS] Rolex Explorer 124270 | $6,800 | Full Set");

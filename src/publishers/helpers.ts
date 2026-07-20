@@ -17,6 +17,13 @@ export function specLines(item: Item): string[] {
   return Object.entries(item.attributes).map(([key, value]) => `${key}: ${value}`);
 }
 
+// Payment/handoff terms appended to LOCAL-pickup listings (Facebook, OfferUp,
+// Craigslist). Signals a normal in-person deal, filters out ship/electronic-pay
+// scammers, and protects the seller (no chargebacks / fake-payment tricks). NOT
+// used on the shipped watch channels (Reddit, Watchuseek) — those sell CONUS via
+// PayPal G&S. Edit this one line to change the wording everywhere.
+export const LOCAL_PICKUP_TERMS = "Cash on local pickup.";
+
 // Put a blank line between sentences and bullets so a description is easy for a
 // human to scan (a wall of text is not). Reliable pieces:
 //  - bullets are split on the "•" marker;

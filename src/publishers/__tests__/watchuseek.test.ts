@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { watchuseek } from "../watchuseek";
+import { LOCAL_PICKUP_TERMS } from "../helpers";
 import { makeItem, makePhotos, deskOverrides } from "./fixtures";
 
 describe("watchuseek.generate", () => {
+  it("does NOT append local-pickup terms (shipped CONUS, not local)", () => {
+    expect(watchuseek.generate(makeItem(), makePhotos(3)).body).not.toContain(LOCAL_PICKUP_TERMS);
+  });
+
   it("builds an FS: title with price", () => {
     const result = watchuseek.generate(makeItem(), makePhotos(3));
     expect(result.title).toBe("FS: Rolex Explorer 124270 - $6,800");
