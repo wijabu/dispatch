@@ -205,27 +205,27 @@ export const craigslistFill: FillScript = {
           .locator('button:has-text("continue"), button[type="submit"], input[name="go"]')
           .first();
 
-      // details -> location. Then let the location page FULLY settle before its
-      // continue is touched: it renders an async map (OSM tiles) + geocodes the
-      // ZIP after `load`, and clicking continue mid-render just no-ops (the page
-      // sits there). Wait for network idle + the map, plus a short settle so the
-      // continue handler is bound.
+      // details -> location. CL's location page renders an async map + geocodes
+      // the ZIP AFTER `load`, and we consistently outran it (networkidle fires
+      // wrong on a tile-loading map). Use a plain generous fixed delay so the
+      // page is genuinely interactive before we touch its continue.
       await tryStep(t, "continue to location", async () => {
         await continueBtn().click({ timeout: 8000 });
-        await page.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
-        await page
-          .waitForSelector('.leaflet-container, #map, [class*="map"]', { timeout: 15000 })
-          .catch(() => {});
-        await page.waitForTimeout(1000);
+        await page.waitForLoadState("load", { timeout: 20000 }).catch(() => {});
+        await page.waitForTimeout(4000);
+        console.log(`[fill] on location page: ${page.url()}`);
       });
 
-      // location -> images. Click a now-actionable continue, then wait for the
-      // image uploader (network idle covers the page swap + uploader init).
+      // location -> images. Settle, click a visible continue, settle again, then
+      // wait for the image uploader.
       await tryStep(t, "continue to images", async () => {
         const cont = continueBtn();
         await cont.waitFor({ state: "visible", timeout: 12000 });
+        await page.waitForTimeout(1000);
         await cont.click({ timeout: 8000 });
-        await page.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
+        await page.waitForLoadState("load", { timeout: 20000 }).catch(() => {});
+        await page.waitForTimeout(3000);
+        console.log(`[fill] after location continue: ${page.url()}`);
         await page.waitForSelector(
           'input[type="file"][accept*="image"], input[type="file"]',
           { timeout: 20000 }
