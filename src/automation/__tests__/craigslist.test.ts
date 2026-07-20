@@ -36,13 +36,15 @@ describe("craigslist fill core (fixture)", () => {
         page,
         { listing, item, photoPaths: [photoA, photoB] },
         t,
-        { postal: "60614" }
+        { postal: "60614", email: "seller@example.com" }
       );
 
       expect(await page.inputValue("#PostingTitle")).toBe(listing.title);
       expect(await page.inputValue("#Ask")).toBe("6800");
       expect(await page.inputValue("#postal_code")).toBe("60614");
       expect(await page.inputValue("#PostingBody")).toBe(listing.body);
+      expect(await page.inputValue("#condition")).toBe("30"); // "excellent" option
+      expect(await page.inputValue("#FromEMail")).toBe("seller@example.com");
       const files = await page.$eval(
         "#file",
         (el) => (el as HTMLInputElement).files!.length
