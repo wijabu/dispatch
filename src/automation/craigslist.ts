@@ -10,21 +10,27 @@ export async function fillCraigslistForm(
   t: StepTracker,
   opts: { postal: string; email: string }
 ): Promise<void> {
-  // id first (fixture + legacy), then current name-based selector.
-  await tryStep(t, "title", () =>
-    page.fill("#PostingTitle, input[name='PostingTitle']", ctx.listing.title)
-  );
-  await tryStep(t, "price", () =>
-    page.fill("#Ask, input[name='price']", String(ctx.item.askingPrice ?? ""))
-  );
+  // CL's json-form tracks each field's value in JS state via change/blur (a
+  // field being "touched"); page.fill sets the DOM value + fires only `input`,
+  // so the validator still treats every field as empty on submit ("all fields
+  // missing" despite visible values). Fill, then dispatch input+change+blur so
+  // the framework commits the value. id first (fixture/legacy), then name-based.
+  const fillAndCommit = (step: string, selector: string, value: string) =>
+    tryStep(t, step, async () => {
+      await page.fill(selector, value);
+      await page.locator(selector).first().evaluate((el) => {
+        for (const type of ["input", "change", "blur"]) {
+          el.dispatchEvent(new Event(type, { bubbles: true }));
+        }
+      });
+    });
+
+  await fillAndCommit("title", "#PostingTitle, input[name='PostingTitle']", ctx.listing.title);
+  await fillAndCommit("price", "#Ask, input[name='price']", String(ctx.item.askingPrice ?? ""));
   if (opts.postal) {
-    await tryStep(t, "postal code", () =>
-      page.fill("#postal_code, input[name='postal']", opts.postal)
-    );
+    await fillAndCommit("postal code", "#postal_code, input[name='postal']", opts.postal);
   }
-  await tryStep(t, "description", () =>
-    page.fill("#PostingBody, textarea[name='PostingBody']", ctx.listing.body)
-  );
+  await fillAndCommit("description", "#PostingBody, textarea[name='PostingBody']", ctx.listing.body);
   // Condition (required, red until set). CL hides the native <select> behind a
   // jQuery UI selectmenu that its json-form framework actually listens to —
   // setting the hidden <select> is ignored (same trap as the category picker).
@@ -39,12 +45,20 @@ export async function fillCraigslistForm(
     } else {
       await page.selectOption("select[name='condition'], #condition", { label });
     }
+    // Commit to json-form's model (change/blur), same as the text fields.
+    await page.locator("select[name='condition'], #condition").first().evaluate((el) => {
+      for (const type of ["change", "blur"]) {
+        el.dispatchEvent(new Event(type, { bubbles: true }));
+      }
+    });
   });
   // Reply email (required, red until set). Fill only when configured in
   // .env.local (CRAIGSLIST_EMAIL); otherwise leave it for you to type.
   if (opts.email) {
-    await tryStep(t, "email", () =>
-      page.fill("input[name='FromEMail'], #FromEMail, input[type='email']", opts.email)
+    await fillAndCommit(
+      "email",
+      "input[name='FromEMail'], #FromEMail, input[type='email']",
+      opts.email
     );
   }
   // Photos live on a later Craigslist page; only upload if a file input is on
