@@ -8,21 +8,21 @@ describe("craigslist.generate", () => {
     expect(craigslist.generate(makeItem(deskOverrides), makePhotos(2)).body).toContain(LOCAL_PICKUP_TERMS);
   });
 
-  it("builds title with price suffix", () => {
+  it("title is the item name only (CL appends the price itself)", () => {
     const result = craigslist.generate(makeItem(deskOverrides), makePhotos(2));
-    expect(result.title).toBe("IKEA Bekant Standing Desk - $120");
+    expect(result.title).toBe("IKEA Bekant Standing Desk");
     expect(result.warnings).toEqual([]);
   });
 
-  it("omits price suffix when no price", () => {
+  it("title is the item name regardless of price", () => {
     const result = craigslist.generate(makeItem({ askingPrice: null }), makePhotos(1));
     expect(result.title).toBe("Rolex Explorer 124270");
   });
 
   it("warns when title exceeds 70 characters", () => {
-    // 75-char name + " - $6,800" suffix (9 chars) = 84-char rendered title
+    // 75-char name, no price suffix, = 75-char title
     const result = craigslist.generate(makeItem({ name: "z".repeat(75) }), makePhotos(1));
-    expect(result.warnings).toContain("Title exceeds Craigslist's 70-character limit (84)");
+    expect(result.warnings).toContain("Title exceeds Craigslist's 70-character limit (75)");
   });
 
   it("includes condition and specs in the body", () => {

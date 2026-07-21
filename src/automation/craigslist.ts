@@ -195,11 +195,11 @@ export const craigslistFill: FillScript = {
         email: STAGING.craigslistEmail,
       });
 
-      // Then advance through the remaining pages and upload the photos, stopping
-      // BEFORE "done with images"/publish — you review the photos and post. Each
-      // "continue" is a full-page form submit; wait for the next page to load.
-      // Best-effort like the rest of the CL flow; a failure records and leaves
-      // the window wherever it got to.
+      // Then advance through the remaining pages, upload the photos, and land on
+      // the final review page ("this is an unpublished draft") — stopping BEFORE
+      // "publish" so you review and post. Each "continue" is a full-page form
+      // submit; wait for the next page to load. Best-effort like the rest of the
+      // CL flow; a failure records and leaves the window wherever it got to.
       const continueBtn = () =>
         page
           .locator('button:has-text("continue"), button[type="submit"], input[name="go"]')
@@ -212,7 +212,7 @@ export const craigslistFill: FillScript = {
       await tryStep(t, "continue to location", async () => {
         await continueBtn().click({ timeout: 8000 });
         await page.waitForLoadState("load", { timeout: 20000 }).catch(() => {});
-        await page.waitForTimeout(4000);
+        await page.waitForTimeout(2000);
         console.log(`[fill] on location page: ${page.url()}`);
       });
 
@@ -256,6 +256,19 @@ export const craigslistFill: FillScript = {
             .catch(() => {});
         });
       }
+
+      // images -> final review page ("this is an unpublished draft"). Click
+      // "done with images" (#doneWithImages) and STOP: we wait for the review
+      // page's publish control to appear but never click it — that's your gate
+      // to review and publish.
+      await tryStep(t, "done with images", async () => {
+        await page.locator("#doneWithImages").first().click({ timeout: 8000 });
+        await page.waitForLoadState("load", { timeout: 20000 }).catch(() => {});
+        await page.waitForTimeout(2000);
+        console.log(`[fill] on review page: ${page.url()}`);
+        // Confirm we're on the review page (publish form present) — do NOT submit.
+        await page.waitForSelector('#publish_bottom, button:has-text("publish")', { timeout: 15000 });
+      });
     }
 
     return resolveResult(t);
