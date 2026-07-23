@@ -8,6 +8,26 @@ URL="http://localhost:3000"
 # Run from the project directory this file lives in.
 cd "$(dirname "$0")" || exit 1
 
+# --- Ensure the Android emulator is up (OfferUp/Facebook automation needs it) ---
+# It's a heavy VM that holds your logged-in apps, so start it ONLY if it isn't
+# already running — never cold-restart a live one. Absolute SDK paths because a
+# double-clicked .command doesn't get your shell's PATH.
+ADB="$HOME/Library/Android/sdk/platform-tools/adb"
+EMULATOR="$HOME/Library/Android/sdk/emulator/emulator"
+AVD="dispatch_offerup"
+[ -x "$ADB" ] || ADB="$(command -v adb)"
+[ -x "$EMULATOR" ] || EMULATOR="$(command -v emulator)"
+if [ -x "$ADB" ] && [ -x "$EMULATOR" ]; then
+  if "$ADB" devices 2>/dev/null | grep -q "^emulator-.*device$"; then
+    echo "Android emulator already running."
+  else
+    echo "Starting the Android emulator ($AVD)…"
+    "$EMULATOR" -avd "$AVD" >/dev/null 2>&1 &
+  fi
+else
+  echo "⚠️  Android SDK not found — skipping emulator (OfferUp/Facebook automation won't work)."
+fi
+
 # Already running? Just open the browser and stop — don't start a second server.
 if curl -s -o /dev/null "$URL"; then
   echo "Dispatch is already running. Opening $URL"
