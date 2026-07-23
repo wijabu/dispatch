@@ -16,10 +16,22 @@ the lowest-priority channel, and its native renew is already a one-click email
 link. The dashboard already *reminds* when a CL renew/reprice is due (from the CL
 `relistPolicy`); only the execute is manual.
 
-## Reddit (r/Watchexchange) posting via the emulator
-Reddit has an Android app, so the OfferUp/Facebook emulator approach could drive
-it. Watch-only channel. Feasible, but design around these r/Watchexchange
-specifics (do a feasibility probe + brainstorm before building):
+## Reddit (r/Watchexchange) posting via the WEB (not the emulator)
+Watch-only channel. **The emulator/app route is a dead-end: the Reddit Android
+app refuses to log in on the emulator** — it returns "Invalid username or
+password" with correct credentials because Reddit enforces **Play Integrity** on
+login and the emulator fails the device-integrity verdict (`ro.build.
+characteristics=emulator`, `ro.kernel.qemu=1`, hardware key attestation fails in
+logcat). Same creds log in fine on a real phone. OfferUp/Facebook don't hard-gate
+login on integrity, which is why they work on the emulator and Reddit doesn't.
+Bypassing Play Integrity (Magisk/attestation spoofing) is fragile + ToS-violating
+— don't.
+
+So automate Reddit **via the web** instead: reddit.com login doesn't use Play
+Integrity, so post to r/Watchexchange as a **Firefox staged handoff like
+Craigslist** (pre-fill + you review/submit), reusing the v1.2 browser-fill infra.
+Feasible, but design around these r/Watchexchange specifics (probe + brainstorm
+before building):
 
 - **Timestamped verification photo, current-dated, per post.** A handwritten
   note with the seller's username + the CURRENT date, placed under the watch.
