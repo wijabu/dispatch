@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getItem } from "@/lib/queries";
-import { deleteItem, markSold, updateStatus } from "@/lib/actions";
+import { deleteItem, updateStatus } from "@/lib/actions";
 import { formatDate, formatPrice, CONDITION_LABELS, STATUS_LABELS } from "@/lib/format";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PhotoGrid } from "@/components/PhotoGrid";
+import { MarkSoldForm } from "@/components/MarkSoldForm";
 import { VISIBLE_ITEM_STATUSES } from "@/db/schema";
 
 export default async function ItemPage({
@@ -21,14 +22,6 @@ export default async function ItemPage({
     const status = formData.get("status");
     const target = VISIBLE_ITEM_STATUSES.find((s) => s === status);
     if (target && item) await updateStatus(item.id, target);
-  }
-
-  async function soldAction(formData: FormData) {
-    "use server";
-    const raw = String(formData.get("soldPrice") ?? "").trim();
-    const price = raw === "" ? null : Number(raw);
-    if (item)
-      await markSold(item.id, Number.isFinite(price ?? NaN) ? price : null);
   }
 
   async function deleteAction() {
@@ -181,28 +174,11 @@ export default async function ItemPage({
         </form>
 
         {item.status !== "sold" && (
-          <form action={soldAction} className="flex items-end gap-2">
-            <div>
-              <label
-                htmlFor="soldPrice"
-                className="mb-1 block text-xs text-zinc-500"
-              >
-                Sold price ($)
-              </label>
-              <input
-                id="soldPrice"
-                name="soldPrice"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder={item.askingPrice?.toString() ?? ""}
-                className="w-32 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              />
-            </div>
-            <button className="rounded-md bg-purple-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-purple-700">
-              Mark sold
-            </button>
-          </form>
+          <MarkSoldForm
+            itemId={item.id}
+            defaultPrice={item.askingPrice}
+            activePublishers={item.listings.filter((l) => l.status === "active").map((l) => l.publisher)}
+          />
         )}
       </section>
 
