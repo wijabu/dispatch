@@ -10,8 +10,8 @@ import { getPublisher } from "@/publishers";
 import { getFillScript, type FillResult } from "@/automation";
 import { acquireFillLock, getBrowserContext, releaseFillLock } from "@/automation/browser";
 import {
-  postOfferup, repriceOfferup, relistOfferup,
-  postFacebook, repriceFacebook, relistFacebook,
+  postOfferup, repriceOfferup, relistOfferup, markSoldOfferup,
+  postFacebook, repriceFacebook, relistFacebook, markSoldFacebook,
   type AndroidResult,
 } from "@/automation/android";
 import { acquireAndroidLock, releaseAndroidLock } from "@/automation/android/device";
@@ -19,7 +19,8 @@ import { AUTOFILL_CHANNELS, STAGING } from "@/config/staging";
 import { OFFERUP_AUTOMATION_ENABLED } from "@/config/android";
 import { FACEBOOK_AUTOMATION_ENABLED } from "@/config/facebook";
 import { stagePhotosCore } from "@/lib/staging-core";
-import { markListingRenewedCore, syncListingPriceCore } from "@/lib/task-actions";
+import { markListingRenewedCore, syncListingPriceCore, markSoldCore, endListingCore } from "@/lib/task-actions";
+import type { SoldChannel } from "@/db/schema";
 
 const run = promisify(execFile);
 const STAGING_ROOT = path.join(process.cwd(), "data", "staging");
@@ -220,6 +221,7 @@ export async function relistOnOfferup(
 
 // ---- Facebook Marketplace (emulator FB app) — mirrors the OfferUp actions ----
 
+
 export async function postToFacebook(itemId: number): Promise<AndroidResult> {
   if (!FACEBOOK_AUTOMATION_ENABLED) {
     return { status: "failed", step: "config", reason: "Facebook automation is disabled" };
@@ -308,4 +310,83 @@ export async function relistOnFacebook(
   revalidatePath("/");
   revalidatePath(`/items/${itemId}/publish`);
   return result;
+}
+
+export type SoldResult = {
+  soldPrice: number | null;
+  soldChannel: SoldChannel | null;
+  channels: { channel: string; outcome: "ended" | "failed" | "manual" | "skipped"; detail?: string }[];
+};
+
+// One-click sale reconciliation. Records the sale, then takes the item down on
+// every ACTIVE channel: OfferUp + Facebook via the emulator, Craigslist left for
+// manual takedown. Any row still active afterward (Craigslist, or a failed
+// emulator takedown) surfaces as a computed manual_takedown task — this action
+// writes no task itself. The sale is recorded even if every takedown fails.
+export async function markSoldAndTakedown(
+  itemId: number,
+  soldPrice: number | null,
+  soldChannel: SoldChannel | null
+): Promise<SoldResult> {
+  const item = await getItem(itemId);
+  if (!item) {
+    return { soldPrice, soldChannel, channels: [{ channel: "item", outcome: "failed", detail: "Item not found" }] };
+  }
+  const { photos, listings: itemListings, prices: _p, ...itemRow } = item;
+
+  // 1. Record the sale first — independent of any takedown.
+  await markSoldCore(db, itemId, soldPrice, soldChannel, new Date());
+
+  const active = itemListings.filter((l) => l.status === "active");
+  const channels: SoldResult["channels"] = [];
+
+  // 2. Per-channel takedown. Emulator channels share the android lock; take it
+  // once for the whole pass so OfferUp and Facebook don't contend.
+  const hasEmulatorChannel = active.some((l) => l.publisher === "offerup" || l.publisher === "facebook");
+  let androidLocked = false;
+  if (hasEmulatorChannel) androidLocked = acquireAndroidLock();
+
+  try {
+    for (const l of active) {
+      if (l.publisher === "craigslist") {
+        channels.push({ channel: "craigslist", outcome: "manual", detail: "Delete the post yourself" });
+        continue;
+      }
+      if (l.publisher === "offerup" || l.publisher === "facebook") {
+        const enabled = l.publisher === "offerup" ? OFFERUP_AUTOMATION_ENABLED : FACEBOOK_AUTOMATION_ENABLED;
+        if (!enabled) {
+          channels.push({ channel: l.publisher, outcome: "failed", detail: "automation disabled" });
+          continue;
+        }
+        if (!androidLocked) {
+          channels.push({ channel: l.publisher, outcome: "failed", detail: "another automation is running" });
+          continue;
+        }
+        let result: AndroidResult;
+        try {
+          result = l.publisher === "offerup"
+            ? await markSoldOfferup({ item: itemRow, listing: getPublisher("offerup")!.generate(itemRow, photos), photoPaths: [] })
+            : await markSoldFacebook({ item: itemRow, listing: getPublisher("facebook")!.generate(itemRow, photos), photoPaths: [] });
+        } catch (err) {
+          result = { status: "failed", step: "unknown", reason: err instanceof Error ? err.message : "Unknown error" };
+        }
+        if (result.status === "done") {
+          await endListingCore(db, l.id, new Date());
+          channels.push({ channel: l.publisher, outcome: "ended" });
+        } else {
+          const detail = result.status === "failed" ? `${result.step}: ${result.reason}` : result.status;
+          channels.push({ channel: l.publisher, outcome: "failed", detail });
+        }
+        continue;
+      }
+      // Any other channel (reddit/watchuseek) has no takedown automation.
+      channels.push({ channel: l.publisher, outcome: "manual", detail: "take down manually" });
+    }
+  } finally {
+    if (androidLocked) releaseAndroidLock();
+  }
+
+  revalidatePath("/");
+  revalidatePath(`/items/${itemId}`);
+  return { soldPrice, soldChannel, channels };
 }
