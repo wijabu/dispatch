@@ -53,11 +53,14 @@ export async function markSoldFacebook(ctx: FlowContext): Promise<AndroidResult>
       await adb.tapNode(menus[0]);
       // UNVERIFIED tap: the management sheet exposes "Mark as sold".
       await tapLabel(adb, facebookSelectors.markSold);
-      // Completion: the management sheet closed (the menu label is gone).
+      // Completion: the management sheet closed (the menu label is gone). Match
+      // the same predicate the menu was FOUND by (contentDesc === menuLabel) so
+      // the check is real — an asymmetric predicate would pass on iteration 0 and
+      // report `done` even if the tap never landed, writing a dishonest `ended`.
       let closed = false;
       for (let i = 0; i < 10; i++) {
         const nodes = await adb.dumpUi().catch(() => [] as UiNode[]);
-        if (nodes.length && !nodes.some((n) => n.contentDesc === menuLabel && n.testId.length === 0)) {
+        if (nodes.length && !nodes.some((n) => n.contentDesc === menuLabel)) {
           closed = true;
           break;
         }
