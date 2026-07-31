@@ -310,6 +310,49 @@ describe("computeTasks — stale_price", () => {
   });
 });
 
+describe("manual_takedown", () => {
+  const soldItem = () => makeItem({ id: 1, name: "Bestier Desk", status: "sold" });
+
+  it("emits a takedown task for an active listing on a sold item", () => {
+    const tasks = computeTasks(
+      inputs({
+        items: [soldItem()],
+        activeListings: [makeListing({ id: 9, itemId: 1, publisher: "craigslist", url: "https://cl/x" })],
+      })
+    );
+    const takedowns = tasks.filter((t) => t.type === "manual_takedown");
+    expect(takedowns).toHaveLength(1);
+    expect(takedowns[0]).toMatchObject({
+      type: "manual_takedown",
+      itemId: 1,
+      itemName: "Bestier Desk",
+      listingId: 9,
+      publisherId: "craigslist",
+      listingUrl: "https://cl/x",
+    });
+  });
+
+  it("does NOT emit for an ended listing (already taken down)", () => {
+    const tasks = computeTasks(
+      inputs({
+        items: [soldItem()],
+        activeListings: [], // ended rows are excluded from activeListings by the query
+      })
+    );
+    expect(tasks.some((t) => t.type === "manual_takedown")).toBe(false);
+  });
+
+  it("does NOT emit for an active listing on a still-published item", () => {
+    const tasks = computeTasks(
+      inputs({
+        items: [makeItem({ id: 1, name: "Live", status: "published" })],
+        activeListings: [makeListing({ id: 9, itemId: 1, publisher: "craigslist" })],
+      })
+    );
+    expect(tasks.some((t) => t.type === "manual_takedown")).toBe(false);
+  });
+});
+
 describe("computeTasks — ready_to_publish", () => {
   it("nudges ready items with no active listings", () => {
     const item = makeItem({ id: 2, status: "ready" });
