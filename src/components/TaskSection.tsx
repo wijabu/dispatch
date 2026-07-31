@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Task } from "@/lib/tasks";
 import {
   applyPriceDrop,
+  completeTakedown,
   confirmListingPriceUpdated,
   confirmListingRenewed,
   endListingForRelist,
@@ -36,6 +37,26 @@ export function TaskSection({ tasks }: { tasks: Task[] }) {
       <div className="space-y-2">
         {tasks.map((task, i) => {
           switch (task.type) {
+            case "manual_takedown":
+              return (
+                <TaskRow key={i}>
+                  <span className="text-sm">
+                    📕 <strong>Take down on {task.publisherName}:</strong>{" "}
+                    <Link href={`/items/${task.itemId}`} className="underline">
+                      {task.itemName}
+                    </Link>{" "}
+                    <span className="text-zinc-500">(sold — still live here)</span>
+                  </span>
+                  <span className="flex gap-1.5">
+                    {task.listingUrl && <OpenListingButton url={task.listingUrl} />}
+                    <form action={completeTakedown.bind(null, task.listingId, task.itemId)}>
+                      <button className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
+                        ✓ Marked done
+                      </button>
+                    </form>
+                  </span>
+                </TaskRow>
+              );
             case "price_drop":
               return (
                 <TaskRow key={i}>

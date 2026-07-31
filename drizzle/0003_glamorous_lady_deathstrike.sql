@@ -1,0 +1,1 @@
+ALTER TABLE `items` ADD `sold_channel` text;

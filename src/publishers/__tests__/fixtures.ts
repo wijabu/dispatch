@@ -12,6 +12,7 @@ export function makeItem(overrides: Partial<Item> = {}): Item {
     askingPrice: 6800,
     minimumPrice: 6200,
     soldPrice: null,
+    soldChannel: null,
     offerupCategory: null,
     offerupSubcategory: null,
     notes: "",

@@ -29,6 +29,7 @@ export type Task =
   | { type: "price_drop"; itemId: number; itemName: string; currentPrice: number; targetPrice: number }
   | { type: "relist"; itemId: number; itemName: string; listingId: number; publisherId: string; publisherName: string; listingUrl: string | null; action: "renew" | "relist"; ageDays: number }
   | { type: "stale_price"; itemId: number; itemName: string; listingId: number; publisherId: string; publisherName: string; listingUrl: string | null; listedPrice: number | null; askingPrice: number }
+  | { type: "manual_takedown"; itemId: number; itemName: string; listingId: number; publisherId: string; publisherName: string; listingUrl: string | null }
   | { type: "ready_to_publish"; itemId: number; itemName: string };
 
 export interface TaskInputs {
@@ -49,6 +50,7 @@ export function computeTasks(inputs: TaskInputs): Task[] {
   const stale: Task[] = [];
   const relists: Task[] = [];
   const ready: Task[] = [];
+  const takedowns: Task[] = [];
 
   const itemById = new Map(items.map((i) => [i.id, i]));
   const publisherById = new Map(inputs.publishers.map((p) => [p.id, p]));
@@ -134,5 +136,25 @@ export function computeTasks(inputs: TaskInputs): Task[] {
     }
   }
 
-  return [...drops, ...stale, ...relists, ...ready];
+  // A sold item with a still-active listing row hasn't actually been taken
+  // down there — Craigslist always (no automation), or OfferUp/Facebook when
+  // their auto-takedown failed. Surface each as a manual task until the row
+  // ends. (Not snooze-gated: a sold item shouldn't linger live.)
+  for (const listing of inputs.activeListings) {
+    const item = itemById.get(listing.itemId);
+    if (!item || item.status !== "sold") continue;
+    const pub = publisherById.get(listing.publisher);
+    if (!pub) continue;
+    takedowns.push({
+      type: "manual_takedown",
+      itemId: item.id,
+      itemName: item.name,
+      listingId: listing.id,
+      publisherId: pub.id,
+      publisherName: pub.name,
+      listingUrl: listing.url,
+    });
+  }
+
+  return [...takedowns, ...drops, ...stale, ...relists, ...ready];
 }

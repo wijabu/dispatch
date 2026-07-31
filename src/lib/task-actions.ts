@@ -2,6 +2,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { eq } from "drizzle-orm";
 import type * as schema from "@/db/schema";
 import { items, listings, priceHistory } from "@/db/schema";
+import type { SoldChannel } from "@/db/schema";
 import { computeDropTarget } from "./tasks";
 
 type DB = BetterSQLite3Database<typeof schema>;
@@ -63,4 +64,38 @@ export async function snoozeItemCore(
 ): Promise<void> {
   const until = new Date(now.getTime() + days * 86_400_000).toISOString().slice(0, 10);
   await db.update(items).set({ snoozedUntil: until }).where(eq(items.id, itemId));
+}
+
+// Mark-sold fan-out: record the sale on the item. Pure write; the fan-out
+// server action wraps this and drives the per-channel takedowns.
+export async function markSoldCore(
+  db: DB,
+  itemId: number,
+  soldPrice: number | null,
+  soldChannel: SoldChannel | null,
+  now: Date
+): Promise<void> {
+  await db
+    .update(items)
+    .set({
+      status: "sold",
+      soldPrice,
+      soldChannel,
+      soldAt: toDbDate(now),
+      updatedAt: toDbDate(now),
+    })
+    .where(eq(items.id, itemId));
+}
+
+// End a single listing row (status=ended, endedAt=now). Shared by the fan-out
+// (on a successful takedown) and completeTakedown (manual "Mark done").
+export async function endListingCore(
+  db: DB,
+  listingId: number,
+  now: Date
+): Promise<void> {
+  await db
+    .update(listings)
+    .set({ status: "ended", endedAt: toDbDate(now) })
+    .where(eq(listings.id, listingId));
 }

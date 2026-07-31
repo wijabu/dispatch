@@ -36,6 +36,15 @@ export const CONDITIONS = [
 
 export type Condition = (typeof CONDITIONS)[number];
 
+export const SOLD_CHANNELS = [
+  "offerup",
+  "facebook",
+  "craigslist",
+  "other",
+] as const;
+
+export type SoldChannel = (typeof SOLD_CHANNELS)[number];
+
 export const items = sqliteTable("items", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
@@ -47,6 +56,7 @@ export const items = sqliteTable("items", {
   askingPrice: real("asking_price"),
   minimumPrice: real("minimum_price"),
   soldPrice: real("sold_price"),
+  soldChannel: text("sold_channel", { enum: SOLD_CHANNELS }),
   // OfferUp category taxonomy, set by the user; used to auto-select the
   // category during OfferUp posting automation. Null = not yet set.
   offerupCategory: text("offerup_category"),

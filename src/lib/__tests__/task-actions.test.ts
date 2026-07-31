@@ -8,7 +8,9 @@ import * as schema from "@/db/schema";
 import { items, listings, priceHistory } from "@/db/schema";
 import {
   applyPriceDropCore,
+  endListingCore,
   markListingRenewedCore,
+  markSoldCore,
   snoozeItemCore,
   syncListingPriceCore,
 } from "../task-actions";
@@ -83,5 +85,37 @@ describe("snoozeItemCore", () => {
     await snoozeItemCore(db, itemId, NOW);
     const [item] = await db.select().from(items).where(eq(items.id, itemId));
     expect(item.snoozedUntil).toBe("2026-07-17");
+  });
+});
+
+describe("markSoldCore", () => {
+  it("sets status=sold, price, channel, soldAt", async () => {
+    await markSoldCore(db, itemId, 35, "facebook", NOW);
+    const [item] = await db.select().from(items).where(eq(items.id, itemId));
+    expect(item.status).toBe("sold");
+    expect(item.soldPrice).toBe(35);
+    expect(item.soldChannel).toBe("facebook");
+    expect(item.soldAt).toBe("2026-07-10 12:00:00");
+  });
+
+  it("accepts a null price and null channel", async () => {
+    await markSoldCore(db, itemId, null, null, NOW);
+    const [item] = await db.select().from(items).where(eq(items.id, itemId));
+    expect(item.status).toBe("sold");
+    expect(item.soldPrice).toBeNull();
+    expect(item.soldChannel).toBeNull();
+  });
+});
+
+describe("endListingCore", () => {
+  it("ends the row and stamps endedAt", async () => {
+    const [listing] = await db
+      .insert(listings)
+      .values({ itemId, publisher: "craigslist", listedPrice: 40 })
+      .returning();
+    await endListingCore(db, listing.id, NOW);
+    const [row] = await db.select().from(listings).where(eq(listings.id, listing.id));
+    expect(row.status).toBe("ended");
+    expect(row.endedAt).toBe("2026-07-10 12:00:00");
   });
 });
