@@ -7,3 +7,4 @@ export { markSoldOfferup } from "./flows/markSold";
 export { postFacebook } from "./flows/facebook/post";
 export { repriceFacebook } from "./flows/facebook/reprice";
 export { relistFacebook } from "./flows/facebook/relist";
+export { markSoldFacebook } from "./flows/facebook/markSold";
