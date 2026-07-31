@@ -18,6 +18,7 @@ import { convertHeicToJpeg, isHeic } from "@/lib/photo-convert";
 import { setPhotoOrder, setPrimaryPhoto } from "@/lib/photo-order";
 import {
   applyPriceDropCore,
+  endListingCore,
   markListingRenewedCore,
   snoozeItemCore,
   syncListingPriceCore,
@@ -257,6 +258,12 @@ export async function endListingForRelist(listingId: number, itemId: number) {
   revalidatePath("/");
   revalidatePath(`/items/${itemId}/publish`);
   redirect(`/items/${itemId}/publish`);
+}
+
+export async function completeTakedown(listingId: number, itemId: number) {
+  await endListingCore(db, listingId, new Date());
+  revalidatePath("/");
+  revalidatePath(`/items/${itemId}`);
 }
 
 export async function markListed(formData: FormData) {
