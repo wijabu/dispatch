@@ -44,6 +44,11 @@ export const offerupTestIds = {
   shareButton: "ItemDetailScreenHeaderShareButton", // opens the OS share sheet (listing URL as text)
   editPostLink: "item-dashboard-screen.edit-post-link",
   markSold: "item-dashboard-screen.mark-sold-button",
+  // Mark-sold flow (captured live 2026-07-31)
+  markSoldAffirm: "ucl.affirm-reject-dialog.affirm.button", // "This can't be undone" confirm
+  soldElsewhereText: "Sold it somewhere else",              // "Who bought it?" radio row (match by content-desc contains)
+  soldConfirm: "Confirm",                                   // "Who bought it?" confirm (content-desc)
+  soldDonationDismiss: "No Thanks",                         // post-sale ASPCA upsell (content-desc; optional)
   dashboardEllipses: "item-dashboard-screen.ellipses-button", // "⋯" overflow → Share / Archive sheet
   // Post/Edit composer — single-page form (Edit-post reuses this; confirm live)
   mediaSelectorButton: "MediaSelectorButton", // opens the CameraRoll bottom sheet
