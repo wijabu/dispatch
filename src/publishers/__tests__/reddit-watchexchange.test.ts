@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { redditWatchexchange } from "../reddit-watchexchange";
-import { makeItem, makePhotos, deskOverrides } from "./fixtures";
+import { makeItem, makePhotos } from "./fixtures";
 
 const watch = () => makeItem({
   name: "Citizen Promaster Land AT6080-53L",
