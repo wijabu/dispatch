@@ -74,7 +74,7 @@ export function MarkSoldForm({
       <div>
         <label htmlFor="soldPrice" className="mb-1 block text-xs text-zinc-500">Sold price ($)</label>
         <input
-          id="soldPrice" type="number" step="0.01" min="0" value={price}
+          id="soldPrice" type="number" step="any" min="0" value={price}
           onChange={(e) => setPrice(e.target.value)}
           placeholder={defaultPrice?.toString() ?? ""}
           className="w-28 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
