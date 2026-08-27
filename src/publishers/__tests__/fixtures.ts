@@ -54,6 +54,7 @@ export function makePhotos(count: number): Photo[] {
     itemId: 1,
     path: `1-photo-${i + 1}.jpg`,
     sortOrder: i,
+    isTimestamp: false,
     createdAt: "2026-07-10 12:00:00",
   }));
 }
