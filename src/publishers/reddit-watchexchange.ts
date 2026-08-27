@@ -24,6 +24,8 @@ export const redditWatchexchange: Publisher = {
     const a = item.attributes;
     const kit = a["Kit"] ?? "Full Kit";
     const variant = a["Variant"];
+    const photosAlbum = a["Photos Album"] ?? "PHOTOS_ALBUM_URL";
+    const timestampLink = a["Timestamp"] ?? "TIMESTAMP_ALBUM_URL";
 
     const title = `[WTS] ${item.name}${variant ? ` - ${variant}` : ""} - ${kit}`;
 
@@ -41,7 +43,7 @@ export const redditWatchexchange: Publisher = {
     // Wil's fixed closer (no-trades + sign-off).
     const body = [
       `For your consideration today is the ${item.name} - ${kit}`,
-      `[Photos](PHOTOS_ALBUM_URL) | [Timestamp](TIMESTAMP_ALBUM_URL)`,
+      `[Photos](${photosAlbum}) | [Timestamp](${timestampLink})`,
       formatDescription(item.description),
       block,
       "Not looking for any trades",

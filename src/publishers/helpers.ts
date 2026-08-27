@@ -13,8 +13,14 @@ export function formatUsd(price: number | null): string | null {
   );
 }
 
+// Attribute keys the reddit-watchexchange publisher consumes directly for the
+// [Photos] | [Timestamp] line — never render them as generic spec lines.
+export const RESERVED_ATTRIBUTE_KEYS = new Set(["Photos Album", "Timestamp"]);
+
 export function specLines(item: Item): string[] {
-  return Object.entries(item.attributes).map(([key, value]) => `${key}: ${value}`);
+  return Object.entries(item.attributes)
+    .filter(([key]) => !RESERVED_ATTRIBUTE_KEYS.has(key))
+    .map(([key, value]) => `${key}: ${value}`);
 }
 
 // Payment/handoff terms appended to LOCAL-pickup listings (Facebook, OfferUp,

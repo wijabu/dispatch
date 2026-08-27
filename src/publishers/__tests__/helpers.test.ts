@@ -71,6 +71,13 @@ describe("specLines", () => {
   it("returns empty array when item has no attributes", () => {
     expect(specLines(makeItem({ attributes: {} }))).toEqual([]);
   });
+  it("skips the reserved album-link keys (no leak to other channels)", () => {
+    const item = makeItem({ attributes: { Brand: "Rolex", "Photos Album": "https://imgur.com/a/AAA", "Timestamp": "https://i.imgur.com/BBB.jpeg" } });
+    const lines = specLines(item);
+    expect(lines).toContain("Brand: Rolex");
+    expect(lines.some((l) => l.startsWith("Photos Album:"))).toBe(false);
+    expect(lines.some((l) => l.startsWith("Timestamp:"))).toBe(false);
+  });
 });
 
 describe("conditionLabel", () => {
