@@ -8,6 +8,8 @@ const CHANNEL_LABELS: Record<SoldChannel, string> = {
   offerup: "OfferUp",
   facebook: "Facebook",
   craigslist: "Craigslist",
+  "reddit-watchexchange": "Reddit r/Watchexchange",
+  watchuseek: "Watchuseek",
   other: "Other",
 };
 

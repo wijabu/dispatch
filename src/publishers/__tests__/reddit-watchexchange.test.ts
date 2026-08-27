@@ -1,36 +1,69 @@
 import { describe, expect, it } from "vitest";
 import { redditWatchexchange } from "../reddit-watchexchange";
-import { LOCAL_PICKUP_TERMS } from "../helpers";
-import { makeItem, makePhotos, deskOverrides } from "./fixtures";
+import { makeItem, makePhotos } from "./fixtures";
+
+const watch = () => makeItem({
+  name: "Citizen Promaster Land AT6080-53L",
+  description: "Navy Promaster on Super Titanium. Radio-controlled.",
+  askingPrice: 250,
+  attributes: {
+    Variant: "Blue Dial",
+    Diameter: "39mm",
+    Thickness: "11.4mm",
+    "Lug Width": "22mm",
+    "Water Resistance": "200m",
+    "Condition Rating": "8.5/10",
+    "Kit Contents": "Original box, papers, extra strap",
+  },
+});
 
 describe("redditWatchexchange.generate", () => {
-  it("does NOT append local-pickup terms (shipped CONUS, not local)", () => {
-    expect(redditWatchexchange.generate(makeItem(), makePhotos(3)).body).not.toContain(LOCAL_PICKUP_TERMS);
+  it("title is title-only in Wil's pattern: [WTS] name - Variant - Full Kit", () => {
+    expect(redditWatchexchange.generate(watch(), makePhotos(3)).title)
+      .toBe("[WTS] Citizen Promaster Land AT6080-53L - Blue Dial - Full Kit");
   });
 
-  it("builds the [WTS] title with price and Box/Papers", () => {
-    const result = redditWatchexchange.generate(makeItem(), makePhotos(3));
-    expect(result.title).toBe("[WTS] Rolex Explorer 124270 | $6,800 | Full Set");
-    expect(result.warnings).toEqual([]);
+  it("opens the comment with the 'For your consideration' line and the imgur placeholders", () => {
+    const { body } = redditWatchexchange.generate(watch(), makePhotos(3));
+    expect(body).toContain("For your consideration today is the Citizen Promaster Land AT6080-53L - Full Kit");
+    expect(body).toContain("[Photos](PHOTOS_ALBUM_URL) | [Timestamp](TIMESTAMP_ALBUM_URL)");
   });
 
-  it("includes description, spec block, condition, and price in the body", () => {
-    const result = redditWatchexchange.generate(makeItem(), makePhotos(3));
-    expect(result.body).toContain("Excellent condition Explorer, purchased 2022.");
-    expect(result.body).toContain("* Reference: 124270");
-    expect(result.body).toContain("Condition: Excellent");
-    expect(result.body).toContain("Price: $6,800 shipped CONUS");
+  it("renders the labeled spec block with Wil's labels (Diameter->Case size, Lug Width->Lugs)", () => {
+    const { body } = redditWatchexchange.generate(watch(), makePhotos(3));
+    expect(body).toContain("Case size: 39mm");
+    expect(body).toContain("Thickness: 11.4mm");
+    expect(body).toContain("Lugs: 22mm");
+    expect(body).toContain("Water Resistance: 200m");
+    expect(body).toContain("Condition: 8.5/10");
+    expect(body).toContain("Price/Shipping: $250 USD Shipped to CONUS by USPS.");
+    expect(body).toContain("Includes Full Kit: Original box, papers, extra strap");
+    expect(body).toContain("Payment Method: PayPal F&F or G&S Invoice (+4% paid by buyer)");
   });
 
-  it("degrades for a bare item: no Box/Papers segment, no spec block", () => {
-    const result = redditWatchexchange.generate(makeItem(deskOverrides), makePhotos(1));
-    expect(result.title).toBe("[WTS] IKEA Bekant Standing Desk | $120");
-    expect(result.body).not.toContain("Specs:");
+  it("ends with Wil's fixed closer after the payment line", () => {
+    const { body } = redditWatchexchange.generate(watch(), makePhotos(3));
+    expect(body.endsWith("Not looking for any trades\n\nCheers")).toBe(true);
   });
 
-  it("omits price segment and warns when no price is set", () => {
-    const result = redditWatchexchange.generate(makeItem({ askingPrice: null }), makePhotos(1));
-    expect(result.title).toBe("[WTS] Rolex Explorer 124270 | Full Set");
-    expect(result.warnings).toContain("No asking price set");
+  it("does NOT emit spec lines for attributes that have no value", () => {
+    const { body } = redditWatchexchange.generate(makeItem({ name: "Seiko SRPD", attributes: { Diameter: "42mm" } }), makePhotos(1));
+    expect(body).toContain("Case size: 42mm");
+    expect(body).not.toContain("Thickness:");
+    expect(body).not.toContain("Lugs:");
+  });
+
+  it("omits the price line and warns when there is no asking price", () => {
+    const noPrice = makeItem({ name: "Orient", askingPrice: null, attributes: {} });
+    const { body, warnings } = redditWatchexchange.generate(noPrice, makePhotos(1));
+    expect(body).not.toContain("Price/Shipping:");
+    expect(warnings).toContain("No asking price set");
+  });
+
+  it("honors a non-default Kit override in title and comment", () => {
+    const headOnly = makeItem({ name: "Tudor BB58", attributes: { Kit: "Head Only" } });
+    const { title, body } = redditWatchexchange.generate(headOnly, makePhotos(1));
+    expect(title).toBe("[WTS] Tudor BB58 - Head Only");
+    expect(body).toContain("Includes Head Only:");
   });
 });
