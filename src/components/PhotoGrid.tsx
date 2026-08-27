@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Photo } from "@/db/schema";
-import { deletePhoto, makePrimaryPhoto, reorderPhotos } from "@/lib/actions";
+import { deletePhoto, makePrimaryPhoto, markTimestampPhoto, reorderPhotos } from "@/lib/actions";
 
 export function PhotoGrid({
   photos,
@@ -71,6 +71,11 @@ export function PhotoGrid({
               ★ Primary
             </span>
           )}
+          {photo.isTimestamp && (
+            <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
+              ⏱ Timestamp
+            </span>
+          )}
           {editable && (
             <div className="absolute right-1 top-1 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
               {index > 0 && (
@@ -84,6 +89,15 @@ export function PhotoGrid({
                   </button>
                 </form>
               )}
+              <form action={markTimestampPhoto.bind(null, photo.id, itemId)}>
+                <button
+                  className={`rounded-full px-2 py-0.5 text-xs text-white hover:bg-sky-500 ${photo.isTimestamp ? "bg-sky-600" : "bg-black/70"}`}
+                  aria-label="Mark as timestamp photo"
+                  title="Mark as timestamp — its own separate link, per r/WatchExchange"
+                >
+                  ⏱
+                </button>
+              </form>
               <form action={deletePhoto.bind(null, photo.id, itemId)}>
                 <button
                   className="rounded-full bg-black/70 px-2 py-0.5 text-xs text-white hover:bg-red-600"

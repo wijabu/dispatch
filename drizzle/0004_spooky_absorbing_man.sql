@@ -1,0 +1,1 @@
+ALTER TABLE `photos` ADD `is_timestamp` integer DEFAULT false NOT NULL;

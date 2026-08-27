@@ -67,3 +67,23 @@ describe("redditWatchexchange.generate", () => {
     expect(body).toContain("Includes Head Only:");
   });
 });
+
+describe("redditWatchexchange photo links", () => {
+  it("uses the Photos Album and Timestamp attributes when set", () => {
+    const item = makeItem({ attributes: { "Photos Album": "https://imgur.com/a/AAA", "Timestamp": "https://i.imgur.com/BBB.jpeg" } });
+    const { body } = redditWatchexchange.generate(item, makePhotos(1));
+    expect(body).toContain("[Photos](https://imgur.com/a/AAA) | [Timestamp](https://i.imgur.com/BBB.jpeg)");
+  });
+
+  it("falls back to placeholders when the links are unset", () => {
+    const { body } = redditWatchexchange.generate(makeItem({ attributes: {} }), makePhotos(1));
+    expect(body).toContain("[Photos](PHOTOS_ALBUM_URL) | [Timestamp](TIMESTAMP_ALBUM_URL)");
+  });
+
+  it("does not render the link attributes as spec/other lines", () => {
+    const item = makeItem({ attributes: { "Photos Album": "https://imgur.com/a/AAA", "Timestamp": "https://i.imgur.com/BBB.jpeg" } });
+    const { body } = redditWatchexchange.generate(item, makePhotos(1));
+    expect(body).not.toContain("Photos Album: https");
+    expect(body).not.toContain("Timestamp: https");
+  });
+});

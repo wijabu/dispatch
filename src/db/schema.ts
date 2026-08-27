@@ -92,6 +92,7 @@ export const photos = sqliteTable("photos", {
   // Path relative to the photos storage root
   path: text("path").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
+  isTimestamp: integer("is_timestamp", { mode: "boolean" }).notNull().default(false),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),

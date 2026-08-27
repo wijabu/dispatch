@@ -29,3 +29,25 @@ export async function setPrimaryPhoto(db: DB, photoId: number, itemId: number) {
     .set({ sortOrder: (row?.min ?? 0) - 1 })
     .where(and(eq(photos.id, photoId), eq(photos.itemId, itemId)));
 }
+
+// Mark one photo as the r/WatchExchange timestamp (one per item). Toggling the
+// same photo again clears it. Independent of primary/sortOrder.
+export async function toggleTimestampPhoto(db: DB, photoId: number, itemId: number) {
+  const [target] = await db
+    .select({ isTimestamp: photos.isTimestamp })
+    .from(photos)
+    .where(and(eq(photos.id, photoId), eq(photos.itemId, itemId)));
+  if (!target) return;
+  if (target.isTimestamp) {
+    await db
+      .update(photos)
+      .set({ isTimestamp: false })
+      .where(and(eq(photos.id, photoId), eq(photos.itemId, itemId)));
+    return;
+  }
+  await db.update(photos).set({ isTimestamp: false }).where(eq(photos.itemId, itemId));
+  await db
+    .update(photos)
+    .set({ isTimestamp: true })
+    .where(and(eq(photos.id, photoId), eq(photos.itemId, itemId)));
+}
