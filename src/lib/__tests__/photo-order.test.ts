@@ -122,4 +122,22 @@ describe("toggleTimestampPhoto", () => {
     await toggleTimestampPhoto(db, b.id, b.itemId);
     expect(await timestampPaths(b.itemId)).toEqual([]);
   });
+
+  it("leaves another item's timestamp untouched", async () => {
+    const [item2] = await db.insert(items).values({ name: "Other" }).returning();
+    const [p2] = await db
+      .insert(photos)
+      .values({ itemId: item2.id, path: "x.jpg", sortOrder: 0, isTimestamp: true })
+      .returning();
+    const [b] = await db.select().from(photos).where(eq(photos.path, "b.jpg"));
+    await toggleTimestampPhoto(db, b.id, b.itemId);
+    const [other] = await db.select().from(photos).where(eq(photos.id, p2.id));
+    expect(other.isTimestamp).toBe(true); // untouched — clear is scoped to the target's item
+  });
+
+  it("is independent of primary: does not change photo order", async () => {
+    const [b] = await db.select().from(photos).where(eq(photos.path, "b.jpg"));
+    await toggleTimestampPhoto(db, b.id, b.itemId);
+    expect(await orderedPaths(b.itemId)).toEqual(["a.jpg", "b.jpg", "c.jpg"]);
+  });
 });
