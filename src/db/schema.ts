@@ -40,6 +40,8 @@ export const SOLD_CHANNELS = [
   "offerup",
   "facebook",
   "craigslist",
+  "reddit-watchexchange",
+  "watchuseek",
   "other",
 ] as const;
 
