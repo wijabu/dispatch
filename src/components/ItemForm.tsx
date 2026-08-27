@@ -159,7 +159,7 @@ export function ItemForm({
             id="askingPrice"
             name="askingPrice"
             type="number"
-            step="0.01"
+            step="any"
             min="0"
             defaultValue={item?.askingPrice ?? ""}
             className={inputClass}
@@ -174,7 +174,7 @@ export function ItemForm({
             id="minimumPrice"
             name="minimumPrice"
             type="number"
-            step="0.01"
+            step="any"
             min="0"
             defaultValue={item?.minimumPrice ?? ""}
             className={inputClass}
@@ -189,7 +189,7 @@ export function ItemForm({
             id="purchasePrice"
             name="purchasePrice"
             type="number"
-            step="0.01"
+            step="any"
             min="0"
             defaultValue={item?.purchasePrice ?? ""}
             className={inputClass}
