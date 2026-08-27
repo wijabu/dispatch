@@ -13,10 +13,8 @@ INSERT INTO items (name, category, condition, status, asking_price, sold_channel
  ('Glycine Combat Sub Phantom GL0083', 'watches', 'excellent', 'sold', 275, 'reddit-watchexchange', '2021-01-04 12:00:00', '2021-01-04 12:00:00', '2021-01-04 12:00:00'),
  ('Glycine Combat Sub Black GL0261', 'watches', 'excellent', 'sold', 395, 'reddit-watchexchange', '2020-12-18 12:00:00', '2020-12-18 12:00:00', '2020-12-18 12:00:00');
 
-INSERT INTO listings (item_id, publisher, url, listed_price, status, listed_at, ended_at)
-SELECT i.id, 'reddit-watchexchange', u.url, i.asking_price, 'ended', i.sold_at, i.sold_at
-FROM items i
-JOIN (VALUES
+WITH u(name, url) AS (
+ VALUES
  ('Sinn 556i RS','https://www.reddit.com/r/Watchexchange/comments/112hkhn/'),
  ('Orient Commuter','https://www.reddit.com/r/Watchexchange/comments/ti1del/'),
  ('Orient Mako II Pepsi','https://www.reddit.com/r/Watchexchange/comments/ti1aj9/'),
@@ -25,5 +23,9 @@ JOIN (VALUES
  ('Seiko Prospex SRPD35K1','https://www.reddit.com/r/Watchexchange/comments/p3cq0w/'),
  ('Glycine Combat Sub Phantom GL0083','https://www.reddit.com/r/Watchexchange/comments/kqa9dh/'),
  ('Glycine Combat Sub Black GL0261','https://www.reddit.com/r/Watchexchange/comments/kfmtuj/')
-) AS u(name, url) ON u.name = i.name
+)
+INSERT INTO listings (item_id, publisher, url, listed_price, status, listed_at, ended_at)
+SELECT i.id, 'reddit-watchexchange', u.url, i.asking_price, 'ended', i.sold_at, i.sold_at
+FROM items i
+JOIN u ON u.name = i.name
 WHERE i.sold_channel = 'reddit-watchexchange';
