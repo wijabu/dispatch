@@ -6,7 +6,7 @@ import { asc, eq } from "drizzle-orm";
 import path from "path";
 import * as schema from "@/db/schema";
 import { items, photos } from "@/db/schema";
-import { setPhotoOrder, setPrimaryPhoto } from "../photo-order";
+import { setPhotoOrder, setPrimaryPhoto, toggleTimestampPhoto } from "../photo-order";
 
 let db: BetterSQLite3Database<typeof schema>;
 
@@ -93,5 +93,33 @@ describe("setPrimaryPhoto", () => {
 
     expect(await orderedPaths(deskItem.id)).toEqual(["a.jpg", "b.jpg", "c.jpg"]);
     expect(await orderedPaths(otherItem.id)).toEqual(["w.jpg"]);
+  });
+});
+
+async function timestampPaths(itemId: number) {
+  const rows = await db.select().from(photos).where(eq(photos.itemId, itemId));
+  return rows.filter((r) => r.isTimestamp).map((r) => r.path);
+}
+
+describe("toggleTimestampPhoto", () => {
+  it("marks the chosen photo as the timestamp", async () => {
+    const [t] = await db.select().from(photos).where(eq(photos.path, "b.jpg"));
+    await toggleTimestampPhoto(db, t.id, t.itemId);
+    expect(await timestampPaths(t.itemId)).toEqual(["b.jpg"]);
+  });
+
+  it("is one-per-item: marking a second clears the first", async () => {
+    const [b] = await db.select().from(photos).where(eq(photos.path, "b.jpg"));
+    const [c] = await db.select().from(photos).where(eq(photos.path, "c.jpg"));
+    await toggleTimestampPhoto(db, b.id, b.itemId);
+    await toggleTimestampPhoto(db, c.id, c.itemId);
+    expect(await timestampPaths(b.itemId)).toEqual(["c.jpg"]);
+  });
+
+  it("toggles off when the same photo is marked again", async () => {
+    const [b] = await db.select().from(photos).where(eq(photos.path, "b.jpg"));
+    await toggleTimestampPhoto(db, b.id, b.itemId);
+    await toggleTimestampPhoto(db, b.id, b.itemId);
+    expect(await timestampPaths(b.itemId)).toEqual([]);
   });
 });
