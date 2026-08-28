@@ -1,5 +1,5 @@
 import type { Publisher } from "./types";
-import { commonWarnings, formatDescription, formatUsd } from "./helpers";
+import { commonWarnings, formatUsd } from "./helpers";
 
 const PAYMENT_METHOD = "PayPal F&F or G&S Invoice (+4% paid by buyer)";
 
@@ -30,21 +30,25 @@ export const redditWatchexchange: Publisher = {
     const title = `[WTS] ${item.name}${variant ? ` - ${variant}` : ""} - ${kit}`;
 
     const price = formatUsd(item.askingPrice);
-    // Single-newline labeled block: specs, then condition/price/includes/payment.
+    // Labeled block: specs, then condition/price/includes/payment. Joined with a
+    // Markdown HARD break ("  \n") so each line stays on its own line on Reddit —
+    // a plain "\n" collapses to a space there and runs the stats together.
     const block = [
       ...SPEC_FIELDS.filter(([k]) => a[k]).map(([k, label]) => `${label}: ${a[k]}`),
       a["Condition Rating"] ? `Condition: ${a["Condition Rating"]}` : "",
       price ? `Price/Shipping: ${price} USD Shipped to CONUS by USPS.` : "",
       `Includes ${kit}: ${a["Kit Contents"] ?? "Original box and papers"}`,
       `Payment Method: ${PAYMENT_METHOD}`,
-    ].filter(Boolean).join("\n");
+    ].filter(Boolean).join("  \n");
 
     // Blank-line-separated sections: intro, photos, prose, labeled block, then
-    // Wil's fixed closer (no-trades + sign-off).
+    // Wil's fixed closer (no-trades + sign-off). The description passes through
+    // AS WRITTEN (his paragraphs) — no sentence-splitting, which on Reddit would
+    // put every sentence on its own line.
     const body = [
       `For your consideration today is the ${item.name} - ${kit}`,
       `[Photos](${photosAlbum}) | [Timestamp](${timestampLink})`,
-      formatDescription(item.description),
+      item.description.trim(),
       block,
       "Not looking for any trades",
       "Cheers",
