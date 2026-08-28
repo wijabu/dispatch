@@ -66,6 +66,20 @@ describe("redditWatchexchange.generate", () => {
     expect(title).toBe("[WTS] Tudor BB58 - Head Only");
     expect(body).toContain("Includes Head Only:");
   });
+
+  it("joins the stat block with Markdown hard breaks so Reddit keeps each line", () => {
+    const { body } = redditWatchexchange.generate(watch(), makePhotos(1));
+    // two trailing spaces + newline between stat lines (a bare \n collapses on Reddit)
+    expect(body).toContain("Case size: 39mm  \nThickness: 11.4mm");
+    expect(body).not.toContain("Case size: 39mm\nThickness");
+  });
+
+  it("passes the description through as written — no sentence-splitting", () => {
+    const item = makeItem({ description: "First sentence. Second sentence. Third one.", attributes: {} });
+    const { body } = redditWatchexchange.generate(item, makePhotos(1));
+    expect(body).toContain("First sentence. Second sentence. Third one.");
+    expect(body).not.toContain("First sentence.\n\nSecond sentence.");
+  });
 });
 
 describe("redditWatchexchange photo links", () => {
