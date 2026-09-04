@@ -177,6 +177,22 @@ describe("computeTasks — relist", () => {
     expect(tasks.filter((t) => t.type === "relist")).toEqual([]);
   });
 
+  it("reddit reposts on the 7-day clock even ABOVE floor (time-based, not floor-gated)", () => {
+    const aboveFloor = makeItem({ id: 1, status: "published", askingPrice: 350, minimumPrice: 300 });
+    const listing = makeListing({ publisher: "reddit-watchexchange", listedAt: "2026-07-01 12:00:00", listedPrice: 350 });
+    const tasks = computeTasks(inputs({ items: [aboveFloor], activeListings: [listing] }));
+    expect(tasks.find((t) => t.type === "relist")).toMatchObject({
+      publisherId: "reddit-watchexchange", action: "relist", ageDays: 9,
+    });
+  });
+
+  it("price-drop channels still wait for the floor (OfferUp above floor = no relist)", () => {
+    const aboveFloor = makeItem({ id: 1, status: "published", askingPrice: 350, minimumPrice: 300 });
+    const listing = makeListing({ publisher: "offerup", listedAt: "2026-07-01 12:00:00", listedPrice: 350 });
+    const tasks = computeTasks(inputs({ items: [aboveFloor], activeListings: [listing] }));
+    expect(tasks.filter((t) => t.type === "relist")).toEqual([]);
+  });
+
   it("facebook: renew action measured from renewedAt", () => {
     const item = makeItem(published);
     const listing = makeListing({
