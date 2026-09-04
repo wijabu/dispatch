@@ -106,14 +106,18 @@ export function computeTasks(inputs: TaskInputs): Task[] {
       });
     }
 
-    // Drop-to-floor-then-relist, all channels: relisting only begins once
-    // the item can no longer drop (askingPrice at or below minimumPrice).
-    // While above floor, the price_drop task carries this cycle instead.
-    // An item with no minimumPrice never reaches a floor and so never
-    // relists — it keeps dropping indefinitely (documented behavior).
+    // Drop-to-floor-then-relist for the price-drop channels (OfferUp
+    // "delete-repost", Facebook/Craigslist "renew-then-repost"): relisting only
+    // begins once the item can no longer drop (askingPrice at or below
+    // minimumPrice); while above floor, the price_drop task carries the cycle.
+    // The watch channels (Reddit "repost", Watchuseek "bump") repost on a fixed
+    // cadence regardless of price — Reddit's 7-day repost rule is time-based, not
+    // a drop-to-floor cycle — so they skip the floor gate.
     const atFloor =
       item.minimumPrice != null && item.askingPrice != null && item.askingPrice <= item.minimumPrice;
-    if (!atFloor) continue;
+    const timeBasedRepost =
+      pub.relistPolicy.method === "repost" || pub.relistPolicy.method === "bump";
+    if (!atFloor && !timeBasedRepost) continue;
 
     const policy = pub.relistPolicy;
     const listedAge = daysBetween(parseDbDate(listing.listedAt), now);
