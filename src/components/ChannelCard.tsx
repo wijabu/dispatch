@@ -14,6 +14,7 @@ import {
   postToFacebook,
   dropFacebookPrice,
   relistOnFacebook,
+  relistWithDrop,
   stageForFacebook,
 } from "@/lib/automation-actions";
 import type { FillResult } from "@/automation/types";
@@ -46,6 +47,8 @@ export function ChannelCard({
   listing,
   itemId,
   defaultPrice,
+  dropTarget,
+  dropHint,
   policyLabel,
   refresh,
   autoFill,
@@ -63,6 +66,8 @@ export function ChannelCard({
   listing: Listing | null;
   itemId: number;
   defaultPrice: number | null;
+  dropTarget: number | null; // computeDropTarget(item): next price, or null if no step / at floor
+  dropHint: string | null; // why the drop button is disabled (null when enabled)
   policyLabel: string;
   refresh?: { state: RefreshState; token: string; dueLabel: string } | null;
   autoFill: boolean; // Tier 1 available for this channel
@@ -239,6 +244,28 @@ export function ChannelCard({
               {isPending ? "Relisting…" : "Relist on OfferUp"}
             </button>
           )}
+          {offerupAutomation && listing && (
+            <button
+              type="button"
+              disabled={isPending || dropTarget == null}
+              title={dropHint ?? undefined}
+              onClick={() =>
+                startTransition(async () => {
+                  setStageNote(null);
+                  setAndroidResult(null);
+                  setOfferupMode("relist");
+                  setAndroidResult(await relistWithDrop(itemId, listing.id, publisherId));
+                })
+              }
+              className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isPending
+                ? "Relisting…"
+                : dropTarget != null
+                  ? `Relist + drop → ${formatPrice(dropTarget)}`
+                  : `Relist + drop (${dropHint})`}
+            </button>
+          )}
           {facebookPostEnabled && !listing && (
             <button
               type="button"
@@ -288,6 +315,28 @@ export function ChannelCard({
               className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
               {isPending ? "Relisting…" : "Relist on Facebook"}
+            </button>
+          )}
+          {facebookAutomation && listing && (
+            <button
+              type="button"
+              disabled={isPending || dropTarget == null}
+              title={dropHint ?? undefined}
+              onClick={() =>
+                startTransition(async () => {
+                  setStageNote(null);
+                  setAndroidResult(null);
+                  setOfferupMode("relist");
+                  setAndroidResult(await relistWithDrop(itemId, listing.id, publisherId));
+                })
+              }
+              className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isPending
+                ? "Relisting…"
+                : dropTarget != null
+                  ? `Relist + drop → ${formatPrice(dropTarget)}`
+                  : `Relist + drop (${dropHint})`}
             </button>
           )}
           {stageTier === "facebook" && !listing && !facebookPostEnabled && (

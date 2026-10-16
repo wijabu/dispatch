@@ -5,6 +5,7 @@ import { publishers } from "@/publishers";
 import { ChannelCard } from "@/components/ChannelCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { describeRelistPolicy } from "@/lib/format";
+import { computeDropTarget } from "@/lib/tasks";
 import { refreshStatus } from "@/lib/refresh";
 import { AUTOFILL_CHANNELS, buildStagedBundle } from "@/config/staging";
 import { OFFERUP_AUTOMATION_ENABLED, OFFERUP_POST_ENABLED } from "@/config/android";
@@ -20,6 +21,13 @@ export default async function PublishPage({
   if (!item) notFound();
   const { photos, listings, prices: _prices, ...itemRow } = item;
   const now = new Date();
+  const dropTarget = computeDropTarget(itemRow);
+  const dropHint =
+    dropTarget != null
+      ? null
+      : itemRow.dropAmount == null && itemRow.dropPercent == null
+        ? "set a drop amount"
+        : "at floor price";
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -65,6 +73,8 @@ export default async function PublishPage({
               listing={activeListing}
               itemId={item.id}
               defaultPrice={item.askingPrice}
+              dropTarget={dropTarget}
+              dropHint={dropHint}
               policyLabel={describeRelistPolicy(pub.relistPolicy)}
               refresh={refresh}
               autoFill={AUTOFILL_CHANNELS[pub.id] ?? false}

@@ -19,7 +19,7 @@ import { AUTOFILL_CHANNELS, STAGING } from "@/config/staging";
 import { OFFERUP_AUTOMATION_ENABLED } from "@/config/android";
 import { FACEBOOK_AUTOMATION_ENABLED } from "@/config/facebook";
 import { stagePhotosCore } from "@/lib/staging-core";
-import { markListingRenewedCore, syncListingPriceCore, markSoldCore, endListingCore } from "@/lib/task-actions";
+import { applyPriceDropCore, markListingRenewedCore, syncListingPriceCore, markSoldCore, endListingCore } from "@/lib/task-actions";
 import type { SoldChannel } from "@/db/schema";
 
 const run = promisify(execFile);
@@ -310,6 +310,37 @@ export async function relistOnFacebook(
   revalidatePath("/");
   revalidatePath(`/items/${itemId}/publish`);
   return result;
+}
+
+// Drop the item's price one step (floored at its minimum via applyPriceDropCore),
+// then relist the given channel at the new price by delegating to that channel's
+// existing relist action. The UI button is disabled unless computeDropTarget(item)
+// != null, so a null drop here is defensive only.
+export async function relistWithDrop(
+  itemId: number,
+  listingId: number,
+  publisherId: string
+): Promise<AndroidResult> {
+  // Guard the channel BEFORE dropping, so an unsupported publisher never lowers
+  // the price and then fails.
+  if (publisherId !== "offerup" && publisherId !== "facebook") {
+    return {
+      status: "failed",
+      step: "drop",
+      reason: `relist+drop not supported for ${publisherId}`,
+    };
+  }
+  const dropped = await applyPriceDropCore(db, itemId, new Date());
+  if (dropped == null) {
+    return {
+      status: "failed",
+      step: "drop",
+      reason: "no price drop available (no step configured or already at floor)",
+    };
+  }
+  return publisherId === "offerup"
+    ? relistOnOfferup(itemId, listingId)
+    : relistOnFacebook(itemId, listingId);
 }
 
 export type SoldResult = {
