@@ -136,17 +136,40 @@ export async function postFacebook(
 
   const t = newTracker();
 
-  // 2. Push this item's photos into the gallery (primary first), clearing any
-  // stale fb_*.jpg from a prior run, and media-scan each.
+  // 2. Push this item's photos into the gallery, clearing any stale fb_*.jpg from
+  // a prior run. NOTE: `adb push` PRESERVES the source file's mtime, so without a
+  // restamp the gallery's newest-first order follows the (arbitrary) source
+  // timestamps, not our order — which lands the wrong shot as the cover. After
+  // pushing, stamp each file's mtime so the primary (index 0) is newest and later
+  // photos descend by one second, and media-scan the primary LAST so DATE_ADDED is
+  // newest-first too. Both keys then agree: gallery tile 0 == primary, tile i ==
+  // photoPaths[i]. (If a future FB build sorts the picker by EXIF capture date
+  // instead, this won't hold — verify tile order on a live post.)
   if (
     !(await step(adb, t, "push photos", async () => {
+      const n = ctx.photoPaths.length;
+      const remoteOf = (i: number) =>
+        `${ANDROID.photoPushDir}/fb_${String(i).padStart(2, "0")}.jpg`;
       await adb.shell(["rm", "-f", `${ANDROID.photoPushDir}/fb_*.jpg`]);
-      for (let i = 0; i < ctx.photoPaths.length; i++) {
-        const remote = `${ANDROID.photoPushDir}/fb_${String(i).padStart(2, "0")}.jpg`;
-        await adb.push(ctx.photoPaths[i], remote);
+      for (let i = 0; i < n; i++) {
+        await adb.push(ctx.photoPaths[i], remoteOf(i));
+      }
+      // mtime: primary newest, each later photo one second older (toybox `touch
+      // -t` takes [[CC]YY]MMDDhhmm[.ss] in local time).
+      const base = Math.floor(Date.now() / 1000);
+      const touchStamp = (sec: number) => {
+        const d = new Date(sec * 1000);
+        const p = (x: number) => String(x).padStart(2, "0");
+        return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}.${p(d.getSeconds())}`;
+      };
+      for (let i = 0; i < n; i++) {
+        await adb.shell(["touch", "-t", touchStamp(base - i), remoteOf(i)]);
+      }
+      // Scan primary last so DATE_ADDED is newest-first as well.
+      for (let i = n - 1; i >= 0; i--) {
         await adb.shell([
           "am", "broadcast", "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
-          "-d", `file://${remote}`,
+          "-d", `file://${remoteOf(i)}`,
         ]);
       }
     }))
@@ -217,10 +240,17 @@ export async function postFacebook(
         if (t0) await adb.tapNode(t0);
         await new Promise((r) => setTimeout(r, 900));
       }
-      // Add the remaining tiles newest-first. A missing index means the gallery
-      // has fewer tiles than photos pushed — attach what's there and stop.
+      // Add the remaining tiles newest-first. A tile can be briefly absent because
+      // its media-scan hasn't landed yet (slow on a cold emulator), which is what
+      // dropped a 5-photo post to 3 — wait and re-check a few times before giving
+      // up, so all N attach. Only a tile still missing after the wait means the
+      // gallery genuinely has fewer tiles than we pushed.
       for (let i = 1; i < count; i++) {
-        const tile = findByTestId(await adb.dumpUi(), `${facebookSelectors.photoTilePrefix}${i}`);
+        let tile = findByTestId(await adb.dumpUi(), `${facebookSelectors.photoTilePrefix}${i}`);
+        for (let r = 0; !tile && r < 6; r++) {
+          await new Promise((res) => setTimeout(res, 700));
+          tile = findByTestId(await adb.dumpUi(), `${facebookSelectors.photoTilePrefix}${i}`);
+        }
         if (!tile) break;
         await adb.tapNode(tile);
         await new Promise((r) => setTimeout(r, 400));
