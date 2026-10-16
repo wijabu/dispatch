@@ -20,6 +20,12 @@ export default async function PublishPage({
   if (!item) notFound();
   const { photos, listings, prices: _prices, ...itemRow } = item;
   const dropTarget = computeDropTarget(itemRow);
+  const dropHint =
+    dropTarget != null
+      ? null
+      : itemRow.dropAmount == null && itemRow.dropPercent == null
+        ? "set a drop amount"
+        : "at floor price";
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -53,6 +59,7 @@ export default async function PublishPage({
               itemId={item.id}
               defaultPrice={item.askingPrice}
               dropTarget={dropTarget}
+              dropHint={dropHint}
               policyLabel={describeRelistPolicy(pub.relistPolicy)}
               autoFill={AUTOFILL_CHANNELS[pub.id] ?? false}
               stageTier={

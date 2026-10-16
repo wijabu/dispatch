@@ -46,6 +46,7 @@ export function ChannelCard({
   itemId,
   defaultPrice,
   dropTarget,
+  dropHint,
   policyLabel,
   autoFill,
   stageTier,
@@ -63,6 +64,7 @@ export function ChannelCard({
   itemId: number;
   defaultPrice: number | null;
   dropTarget: number | null; // computeDropTarget(item): next price, or null if no step / at floor
+  dropHint: string | null; // why the drop button is disabled (null when enabled)
   policyLabel: string;
   autoFill: boolean; // Tier 1 available for this channel
   stageTier: "facebook" | "reddit" | "watchuseek" | null;
@@ -232,10 +234,11 @@ export function ChannelCard({
               {isPending ? "Relisting…" : "Relist on OfferUp"}
             </button>
           )}
-          {offerupAutomation && listing && dropTarget != null && (
+          {offerupAutomation && listing && (
             <button
               type="button"
-              disabled={isPending}
+              disabled={isPending || dropTarget == null}
+              title={dropHint ?? undefined}
               onClick={() =>
                 startTransition(async () => {
                   setStageNote(null);
@@ -246,7 +249,11 @@ export function ChannelCard({
               }
               className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
-              {isPending ? "Relisting…" : `Relist + drop → ${formatPrice(dropTarget)}`}
+              {isPending
+                ? "Relisting…"
+                : dropTarget != null
+                  ? `Relist + drop → ${formatPrice(dropTarget)}`
+                  : `Relist + drop (${dropHint})`}
             </button>
           )}
           {facebookPostEnabled && !listing && (
@@ -300,10 +307,11 @@ export function ChannelCard({
               {isPending ? "Relisting…" : "Relist on Facebook"}
             </button>
           )}
-          {facebookAutomation && listing && dropTarget != null && (
+          {facebookAutomation && listing && (
             <button
               type="button"
-              disabled={isPending}
+              disabled={isPending || dropTarget == null}
+              title={dropHint ?? undefined}
               onClick={() =>
                 startTransition(async () => {
                   setStageNote(null);
@@ -314,7 +322,11 @@ export function ChannelCard({
               }
               className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
-              {isPending ? "Relisting…" : `Relist + drop → ${formatPrice(dropTarget)}`}
+              {isPending
+                ? "Relisting…"
+                : dropTarget != null
+                  ? `Relist + drop → ${formatPrice(dropTarget)}`
+                  : `Relist + drop (${dropHint})`}
             </button>
           )}
           {stageTier === "facebook" && !listing && !facebookPostEnabled && (
