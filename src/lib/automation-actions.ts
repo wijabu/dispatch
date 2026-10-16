@@ -321,6 +321,15 @@ export async function relistWithDrop(
   listingId: number,
   publisherId: string
 ): Promise<AndroidResult> {
+  // Guard the channel BEFORE dropping, so an unsupported publisher never lowers
+  // the price and then fails.
+  if (publisherId !== "offerup" && publisherId !== "facebook") {
+    return {
+      status: "failed",
+      step: "drop",
+      reason: `relist+drop not supported for ${publisherId}`,
+    };
+  }
   const dropped = await applyPriceDropCore(db, itemId, new Date());
   if (dropped == null) {
     return {
@@ -329,13 +338,9 @@ export async function relistWithDrop(
       reason: "no price drop available (no step configured or already at floor)",
     };
   }
-  if (publisherId === "offerup") return relistOnOfferup(itemId, listingId);
-  if (publisherId === "facebook") return relistOnFacebook(itemId, listingId);
-  return {
-    status: "failed",
-    step: "drop",
-    reason: `relist+drop not supported for ${publisherId}`,
-  };
+  return publisherId === "offerup"
+    ? relistOnOfferup(itemId, listingId)
+    : relistOnFacebook(itemId, listingId);
 }
 
 export type SoldResult = {
