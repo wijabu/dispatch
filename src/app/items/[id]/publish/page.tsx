@@ -6,6 +6,7 @@ import { ChannelCard } from "@/components/ChannelCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { describeRelistPolicy } from "@/lib/format";
 import { computeDropTarget } from "@/lib/tasks";
+import { refreshStatus } from "@/lib/refresh";
 import { AUTOFILL_CHANNELS, buildStagedBundle } from "@/config/staging";
 import { OFFERUP_AUTOMATION_ENABLED, OFFERUP_POST_ENABLED } from "@/config/android";
 import { FACEBOOK_AUTOMATION_ENABLED, FACEBOOK_POST_ENABLED } from "@/config/facebook";
@@ -19,6 +20,7 @@ export default async function PublishPage({
   const item = await getItem(Number(id));
   if (!item) notFound();
   const { photos, listings, prices: _prices, ...itemRow } = item;
+  const now = new Date();
   const dropTarget = computeDropTarget(itemRow);
   const dropHint =
     dropTarget != null
@@ -49,6 +51,19 @@ export default async function PublishPage({
           const generated = pub.generate(itemRow, photos);
           const activeListing =
             listings.find((l) => l.publisher === pub.id && l.status === "active") ?? null;
+          const r = activeListing ? refreshStatus(activeListing, pub.relistPolicy, now) : null;
+          const refresh = r
+            ? {
+                state: r.state,
+                token: r.token,
+                dueLabel: r.dueAt.toLocaleString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                }),
+              }
+            : null;
           return (
             <ChannelCard
               key={pub.id}
@@ -61,6 +76,7 @@ export default async function PublishPage({
               dropTarget={dropTarget}
               dropHint={dropHint}
               policyLabel={describeRelistPolicy(pub.relistPolicy)}
+              refresh={refresh}
               autoFill={AUTOFILL_CHANNELS[pub.id] ?? false}
               stageTier={
                 pub.id === "facebook"

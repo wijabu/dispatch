@@ -20,6 +20,8 @@ import {
 import type { FillResult } from "@/automation/types";
 import type { AndroidResult } from "@/automation/android";
 import { STAGING } from "@/config/staging";
+import { RefreshBadge } from "@/components/RefreshBadge";
+import type { RefreshState } from "@/lib/refresh";
 
 function CopyButton({ label, text }: { label: string; text: string }) {
   const [copied, setCopied] = useState(false);
@@ -48,6 +50,7 @@ export function ChannelCard({
   dropTarget,
   dropHint,
   policyLabel,
+  refresh,
   autoFill,
   stageTier,
   stagedBundle,
@@ -66,6 +69,7 @@ export function ChannelCard({
   dropTarget: number | null; // computeDropTarget(item): next price, or null if no step / at floor
   dropHint: string | null; // why the drop button is disabled (null when enabled)
   policyLabel: string;
+  refresh?: { state: RefreshState; token: string; dueLabel: string } | null;
   autoFill: boolean; // Tier 1 available for this channel
   stageTier: "facebook" | "reddit" | "watchuseek" | null;
   stagedBundle: string; // paste-ready text for staged handoff
@@ -137,6 +141,12 @@ export function ChannelCard({
           <div>
             <span className="font-semibold">{publisherName}</span>
             <div className="text-[11px] text-zinc-500">{policyLabel}</div>
+            {refresh && (
+              <span className="ml-2 inline-flex items-center gap-1 align-middle">
+                <RefreshBadge state={refresh.state} token={refresh.token} />
+                <span className="text-[10px] text-zinc-500">refresh {refresh.dueLabel}</span>
+              </span>
+            )}
           </div>
           {listing && (
             <span className="ml-2 text-xs text-purple-600 dark:text-purple-400">

@@ -49,12 +49,20 @@ export async function getFirstPhotos(itemIds: number[]) {
   return map;
 }
 
-export async function getActiveListingsByItem(): Promise<Map<number, string[]>> {
+export interface ActiveListingTiming {
+  publisher: string;
+  listedAt: string;
+  renewedAt: string | null;
+}
+
+export async function getActiveListingsWithTimingByItem(): Promise<
+  Map<number, ActiveListingTiming[]>
+> {
   const rows = await db.select().from(listings).where(eq(listings.status, "active"));
-  const map = new Map<number, string[]>();
+  const map = new Map<number, ActiveListingTiming[]>();
   for (const row of rows) {
     const arr = map.get(row.itemId) ?? [];
-    arr.push(row.publisher);
+    arr.push({ publisher: row.publisher, listedAt: row.listedAt, renewedAt: row.renewedAt });
     map.set(row.itemId, arr);
   }
   return map;
