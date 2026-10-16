@@ -2,9 +2,11 @@ import Link from "next/link";
 import {
   getItems,
   getFirstPhotos,
-  getActiveListingsByItem,
+  getActiveListingsWithTimingByItem,
   getTaskData,
 } from "@/lib/queries";
+import { soonestRefresh, type ListingWithPolicy } from "@/lib/refresh";
+import { RefreshBadge } from "@/components/RefreshBadge";
 import { formatPrice, STATUS_LABELS } from "@/lib/format";
 import { StatusBadge } from "@/components/StatusBadge";
 import { VISIBLE_ITEM_STATUSES, type ItemStatus } from "@/db/schema";
@@ -31,10 +33,11 @@ export default async function Dashboard({
     allItems = allItems.filter((item) => item.status === status);
   }
   const thumbnails = await getFirstPhotos(allItems.map((i) => i.id));
-  const listedWhere = await getActiveListingsByItem();
+  const listedTiming = await getActiveListingsWithTimingByItem();
+  const now = new Date();
 
   const taskData = await getTaskData();
-  const tasks = computeTasks({ ...taskData, publishers, now: new Date() });
+  const tasks = computeTasks({ ...taskData, publishers, now });
 
   return (
     <div className="space-y-6">
@@ -98,7 +101,14 @@ export default async function Dashboard({
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {allItems.map((item) => (
+          {allItems.map((item) => {
+            const timing = listedTiming.get(item.id) ?? [];
+            const refreshEntries: ListingWithPolicy[] = timing.flatMap((e) => {
+              const pub = getPublisher(e.publisher);
+              return pub ? [{ listing: e, policy: pub.relistPolicy }] : [];
+            });
+            const soon = soonestRefresh(refreshEntries, now);
+            return (
             <Link
               key={item.id}
               href={`/items/${item.id}`}
@@ -136,21 +146,23 @@ export default async function Dashboard({
                   )}
                   <span className="text-xs text-zinc-500">{item.category}</span>
                 </div>
-                {(listedWhere.get(item.id) ?? []).length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {(listedWhere.get(item.id) ?? []).map((pubId) => (
+                {timing.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1">
+                    {timing.map((e) => (
                       <span
-                        key={pubId}
+                        key={e.publisher}
                         className="rounded bg-green-50 px-1.5 py-0.5 text-[10px] font-medium text-green-700 dark:bg-green-950 dark:text-green-400"
                       >
-                        {getPublisher(pubId)?.name ?? pubId}
+                        {getPublisher(e.publisher)?.name ?? e.publisher}
                       </span>
                     ))}
+                    {soon && <RefreshBadge state={soon.state} token={soon.token} title={`Next refresh due ${soon.dueAt.toLocaleString()}`} />}
                   </div>
                 )}
               </div>
             </Link>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
