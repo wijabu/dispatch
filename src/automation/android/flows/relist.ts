@@ -230,5 +230,13 @@ export async function relistOfferup(ctx: FlowContext): Promise<AndroidResult> {
   )
     return resolveResult(t);
 
+  // Leave the app on its home screen rather than the just-archived listing,
+  // which reads like a failure. Best-effort — the relist already succeeded.
+  try {
+    await launchOfferup(adb);
+  } catch {
+    // navigation nicety only; ignore
+  }
+
   return resolveResult(t);
 }

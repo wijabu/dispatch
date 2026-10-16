@@ -19,7 +19,7 @@ import { AUTOFILL_CHANNELS, STAGING } from "@/config/staging";
 import { OFFERUP_AUTOMATION_ENABLED } from "@/config/android";
 import { FACEBOOK_AUTOMATION_ENABLED } from "@/config/facebook";
 import { stagePhotosCore } from "@/lib/staging-core";
-import { applyPriceDropCore, markListingRenewedCore, syncListingPriceCore, markSoldCore, endListingCore } from "@/lib/task-actions";
+import { applyPriceDropCore, markListingRenewedCore, markListingRelistedCore, syncListingPriceCore, markSoldCore, endListingCore } from "@/lib/task-actions";
 import type { SoldChannel } from "@/db/schema";
 
 const run = promisify(execFile);
@@ -203,7 +203,8 @@ export async function relistOnOfferup(
   try {
     result = await relistOfferup({ listing, item: itemRow, photoPaths });
     if (result.status === "done") {
-      await markListingRenewedCore(db, listingId, new Date());
+      // Delete-repost = a fresh post at the current (possibly dropped) price.
+      await markListingRelistedCore(db, listingId, new Date());
     }
   } catch (err) {
     result = {
@@ -301,7 +302,12 @@ export async function relistOnFacebook(
   let result: AndroidResult;
   try {
     result = await relistFacebook({ listing, item: itemRow, photoPaths }, { action });
-    if (result.status === "done") await markListingRenewedCore(db, listingId, new Date());
+    if (result.status === "done") {
+      // FB renew keeps the same post (so listedAt stays), but a drop may have
+      // changed the price — sync the stored listed price.
+      await markListingRenewedCore(db, listingId, new Date());
+      await syncListingPriceCore(db, listingId);
+    }
   } catch (err) {
     result = { status: "failed", step: "unknown", reason: err instanceof Error ? err.message : "Unknown error" };
   } finally {
