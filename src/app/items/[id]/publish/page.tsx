@@ -5,6 +5,7 @@ import { publishers } from "@/publishers";
 import { ChannelCard } from "@/components/ChannelCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { describeRelistPolicy } from "@/lib/format";
+import { computeDropTarget } from "@/lib/tasks";
 import { AUTOFILL_CHANNELS, buildStagedBundle } from "@/config/staging";
 import { OFFERUP_AUTOMATION_ENABLED, OFFERUP_POST_ENABLED } from "@/config/android";
 import { FACEBOOK_AUTOMATION_ENABLED, FACEBOOK_POST_ENABLED } from "@/config/facebook";
@@ -18,6 +19,7 @@ export default async function PublishPage({
   const item = await getItem(Number(id));
   if (!item) notFound();
   const { photos, listings, prices: _prices, ...itemRow } = item;
+  const dropTarget = computeDropTarget(itemRow);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -50,6 +52,7 @@ export default async function PublishPage({
               listing={activeListing}
               itemId={item.id}
               defaultPrice={item.askingPrice}
+              dropTarget={dropTarget}
               policyLabel={describeRelistPolicy(pub.relistPolicy)}
               autoFill={AUTOFILL_CHANNELS[pub.id] ?? false}
               stageTier={
