@@ -56,6 +56,28 @@ export async function markListingRenewedCore(
     .where(eq(listings.id, listingId));
 }
 
+// A fresh repost (e.g. OfferUp's delete-repost): the stored row now stands for a
+// NEW live post at the current asking price, posted now. Unlike a plain renew, it
+// resets listedAt to the repost time and syncs listedPrice to the item's asking,
+// so the publish card reflects the fresh post instead of the archived original.
+export async function markListingRelistedCore(
+  db: DB,
+  listingId: number,
+  now: Date
+): Promise<void> {
+  const [listing] = await db.select().from(listings).where(eq(listings.id, listingId));
+  if (!listing) return;
+  const [item] = await db.select().from(items).where(eq(items.id, listing.itemId));
+  await db
+    .update(listings)
+    .set({
+      listedAt: toDbDate(now),
+      renewedAt: toDbDate(now),
+      listedPrice: item?.askingPrice ?? listing.listedPrice,
+    })
+    .where(eq(listings.id, listingId));
+}
+
 export async function snoozeItemCore(
   db: DB,
   itemId: number,

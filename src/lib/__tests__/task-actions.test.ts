@@ -10,6 +10,7 @@ import {
   applyPriceDropCore,
   endListingCore,
   markListingRenewedCore,
+  markListingRelistedCore,
   markSoldCore,
   snoozeItemCore,
   syncListingPriceCore,
@@ -117,5 +118,26 @@ describe("endListingCore", () => {
     const [row] = await db.select().from(listings).where(eq(listings.id, listing.id));
     expect(row.status).toBe("ended");
     expect(row.endedAt).toBe("2026-07-10 12:00:00");
+  });
+});
+
+describe("markListingRelistedCore", () => {
+  it("resets listedAt + renewedAt to now and syncs listedPrice to asking", async () => {
+    await db.update(items).set({ askingPrice: 6596 }).where(eq(items.id, itemId));
+    const [listing] = await db
+      .insert(listings)
+      .values({
+        itemId,
+        publisher: "offerup",
+        status: "active",
+        listedPrice: 6800,
+        listedAt: "2026-07-01 00:00:00",
+      })
+      .returning();
+    await markListingRelistedCore(db, listing.id, NOW);
+    const [row] = await db.select().from(listings).where(eq(listings.id, listing.id));
+    expect(row.listedPrice).toBe(6596);
+    expect(row.listedAt).toBe("2026-07-10 12:00:00");
+    expect(row.renewedAt).toBe("2026-07-10 12:00:00");
   });
 });
