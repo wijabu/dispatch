@@ -7,6 +7,9 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { PhotoGrid } from "@/components/PhotoGrid";
 import { MarkSoldForm } from "@/components/MarkSoldForm";
 import { VISIBLE_ITEM_STATUSES } from "@/db/schema";
+import { getPublisher } from "@/publishers";
+import { refreshStatus } from "@/lib/refresh";
+import { RefreshBadge } from "@/components/RefreshBadge";
 
 export default async function ItemPage({
   params,
@@ -16,6 +19,8 @@ export default async function ItemPage({
   const { id } = await params;
   const item = await getItem(Number(id));
   if (!item) notFound();
+  const now = new Date();
+  const activeListings = item.listings.filter((l) => l.status === "active");
 
   async function statusAction(formData: FormData) {
     "use server";
@@ -181,6 +186,35 @@ export default async function ItemPage({
           />
         )}
       </section>
+
+      {activeListings.length > 0 && (
+        <section>
+          <h2 className="mb-2 text-sm font-medium text-zinc-500">Active listings</h2>
+          <ul className="space-y-1 text-sm">
+            {activeListings.map((l) => {
+              const pub = getPublisher(l.publisher);
+              const r = pub ? refreshStatus(l, pub.relistPolicy, now) : null;
+              return (
+                <li key={l.id} className="flex items-center gap-2">
+                  <span className="font-medium">{pub?.name ?? l.publisher}</span>
+                  {r && <RefreshBadge state={r.state} token={r.token} />}
+                  {r && (
+                    <span className="text-xs text-zinc-500">
+                      refresh{" "}
+                      {r.dueAt.toLocaleString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       <section className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
         <div>
