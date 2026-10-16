@@ -49,17 +49,6 @@ export async function getFirstPhotos(itemIds: number[]) {
   return map;
 }
 
-export async function getActiveListingsByItem(): Promise<Map<number, string[]>> {
-  const rows = await db.select().from(listings).where(eq(listings.status, "active"));
-  const map = new Map<number, string[]>();
-  for (const row of rows) {
-    const arr = map.get(row.itemId) ?? [];
-    arr.push(row.publisher);
-    map.set(row.itemId, arr);
-  }
-  return map;
-}
-
 export interface ActiveListingTiming {
   publisher: string;
   listedAt: string;
