@@ -21,9 +21,41 @@ import { FACEBOOK_AUTOMATION_ENABLED } from "@/config/facebook";
 import { stagePhotosCore } from "@/lib/staging-core";
 import { applyPriceDropCore, markListingRenewedCore, markListingRelistedCore, syncListingPriceCore, markSoldCore, endListingCore } from "@/lib/task-actions";
 import type { SoldChannel } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { items } from "@/db/schema";
+import { logAutomation, resultFields, type AutomationAction } from "@/lib/automation-log";
 
 const run = promisify(execFile);
 const STAGING_ROOT = path.join(process.cwd(), "data", "staging");
+
+async function itemNameFor(itemId: number): Promise<string | undefined> {
+  try {
+    const [row] = await db.select({ name: items.name }).from(items).where(eq(items.id, itemId));
+    return row?.name;
+  } catch {
+    return undefined;
+  }
+}
+
+// Run an emulator action and record its result in the automation log (file +
+// Terminal). Logging never changes the returned result.
+async function withLog(
+  action: AutomationAction,
+  itemId: number,
+  channel: string,
+  run: () => Promise<AndroidResult>
+): Promise<AndroidResult> {
+  const result = await run();
+  await logAutomation({
+    at: new Date().toISOString(),
+    action,
+    itemId,
+    itemName: await itemNameFor(itemId),
+    channel,
+    ...resultFields(result),
+  });
+  return result;
+}
 
 export async function openAndPrefill(
   itemId: number,
@@ -104,7 +136,7 @@ export async function openListingInDedicatedBrowser(url: string): Promise<void> 
 
 // Mirrors openAndPrefill's lock/load/generate/finally shape, but drives the
 // Android emulator (via postOfferup) instead of the Playwright browser.
-export async function postToOfferup(itemId: number): Promise<AndroidResult> {
+async function postToOfferupRun(itemId: number): Promise<AndroidResult> {
   if (!OFFERUP_AUTOMATION_ENABLED) {
     return { status: "failed", step: "config", reason: "OfferUp automation is disabled" };
   }
@@ -131,9 +163,13 @@ export async function postToOfferup(itemId: number): Promise<AndroidResult> {
   }
 }
 
+export async function postToOfferup(itemId: number): Promise<AndroidResult> {
+  return withLog("post", itemId, "offerup", () => postToOfferupRun(itemId));
+}
+
 // Pushes the item's current asking price (already dropped in Dispatch) out to
 // the live OfferUp listing, then reconciles the listing's recorded price.
-export async function dropOfferupPrice(
+async function dropOfferupPriceRun(
   itemId: number,
   listingId: number
 ): Promise<AndroidResult> {
@@ -178,11 +214,15 @@ export async function dropOfferupPrice(
   return result;
 }
 
+export async function dropOfferupPrice(itemId: number, listingId: number): Promise<AndroidResult> {
+  return withLog("reprice", itemId, "offerup", () => dropOfferupPriceRun(itemId, listingId));
+}
+
 // Relist an item on OfferUp: post a fresh copy (auto-submit) then archive the
 // old listing (hands-off, post-first/delete-last). On success stamps the
 // ledger's renewedAt so the engine's relist cadence resets. Only fires once the
 // item is at its floor (the engine suppresses relist tasks until asking <= min).
-export async function relistOnOfferup(
+async function relistOnOfferupRun(
   itemId: number,
   listingId: number
 ): Promise<AndroidResult> {
@@ -220,10 +260,14 @@ export async function relistOnOfferup(
   return result;
 }
 
+export async function relistOnOfferup(itemId: number, listingId: number): Promise<AndroidResult> {
+  return withLog("relist", itemId, "offerup", () => relistOnOfferupRun(itemId, listingId));
+}
+
 // ---- Facebook Marketplace (emulator FB app) — mirrors the OfferUp actions ----
 
 
-export async function postToFacebook(itemId: number): Promise<AndroidResult> {
+async function postToFacebookRun(itemId: number): Promise<AndroidResult> {
   if (!FACEBOOK_AUTOMATION_ENABLED) {
     return { status: "failed", step: "config", reason: "Facebook automation is disabled" };
   }
@@ -245,7 +289,11 @@ export async function postToFacebook(itemId: number): Promise<AndroidResult> {
   }
 }
 
-export async function dropFacebookPrice(
+export async function postToFacebook(itemId: number): Promise<AndroidResult> {
+  return withLog("post", itemId, "facebook", () => postToFacebookRun(itemId));
+}
+
+async function dropFacebookPriceRun(
   itemId: number,
   listingId: number
 ): Promise<AndroidResult> {
@@ -277,7 +325,11 @@ export async function dropFacebookPrice(
   return result;
 }
 
-export async function relistOnFacebook(
+export async function dropFacebookPrice(itemId: number, listingId: number): Promise<AndroidResult> {
+  return withLog("reprice", itemId, "facebook", () => dropFacebookPriceRun(itemId, listingId));
+}
+
+async function relistOnFacebookRun(
   itemId: number,
   listingId: number
 ): Promise<AndroidResult> {
@@ -318,6 +370,10 @@ export async function relistOnFacebook(
   return result;
 }
 
+export async function relistOnFacebook(itemId: number, listingId: number): Promise<AndroidResult> {
+  return withLog("relist", itemId, "facebook", () => relistOnFacebookRun(itemId, listingId));
+}
+
 // Drop the item's price one step (floored at its minimum via applyPriceDropCore),
 // then relist the given channel at the new price by delegating to that channel's
 // existing relist action. The UI button is disabled unless computeDropTarget(item)
@@ -352,7 +408,7 @@ export async function relistWithDrop(
 export type SoldResult = {
   soldPrice: number | null;
   soldChannel: SoldChannel | null;
-  channels: { channel: string; outcome: "ended" | "failed" | "manual" | "skipped"; detail?: string }[];
+  channels: { channel: string; outcome: "ended" | "failed" | "manual" | "skipped"; detail?: string; screenshot?: string }[];
 };
 
 // One-click sale reconciliation. Records the sale, then takes the item down on
@@ -367,6 +423,10 @@ export async function markSoldAndTakedown(
 ): Promise<SoldResult> {
   const item = await getItem(itemId);
   if (!item) {
+    await logAutomation({
+      at: new Date().toISOString(), action: "mark_sold", itemId, channel: "item",
+      outcome: "failed", reason: "Item not found",
+    });
     return { soldPrice, soldChannel, channels: [{ channel: "item", outcome: "failed", detail: "Item not found" }] };
   }
   const { photos, listings: itemListings, prices: _p, ...itemRow } = item;
@@ -412,7 +472,8 @@ export async function markSoldAndTakedown(
           channels.push({ channel: l.publisher, outcome: "ended" });
         } else {
           const detail = result.status === "failed" ? `${result.step}: ${result.reason}` : result.status;
-          channels.push({ channel: l.publisher, outcome: "failed", detail });
+          const screenshot = result.status === "failed" ? result.screenshot : undefined;
+          channels.push({ channel: l.publisher, outcome: "failed", detail, ...(screenshot ? { screenshot } : {}) });
         }
         continue;
       }
@@ -421,6 +482,19 @@ export async function markSoldAndTakedown(
     }
   } finally {
     if (androidLocked) releaseAndroidLock();
+  }
+
+  for (const c of channels) {
+    await logAutomation({
+      at: new Date().toISOString(),
+      action: "mark_sold",
+      itemId,
+      itemName: itemRow.name,
+      channel: c.channel,
+      outcome: c.outcome,
+      ...(c.detail ? { reason: c.detail } : {}),
+      ...(c.screenshot ? { screenshot: c.screenshot } : {}),
+    });
   }
 
   revalidatePath("/");
