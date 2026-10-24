@@ -17,7 +17,6 @@ import { redirect } from "next/navigation";
 import { convertHeicToJpeg, isHeic } from "@/lib/photo-convert";
 import { setPhotoOrder, setPrimaryPhoto, toggleTimestampPhoto } from "@/lib/photo-order";
 import {
-  applyPriceDropCore,
   endListingCore,
   markListingRenewedCore,
   snoozeItemCore,
@@ -231,13 +230,6 @@ export async function reorderPhotos(itemId: number, orderedIds: number[]) {
   revalidatePath("/");
   revalidatePath(`/items/${itemId}`);
   revalidatePath(`/items/${itemId}/edit`);
-}
-
-export async function applyPriceDrop(itemId: number) {
-  await applyPriceDropCore(db, itemId, new Date());
-  revalidatePath("/");
-  revalidatePath(`/items/${itemId}`);
-  revalidatePath(`/items/${itemId}/publish`);
 }
 
 export async function confirmListingPriceUpdated(listingId: number, itemId: number) {

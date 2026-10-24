@@ -1,7 +1,6 @@
 import Link from "next/link";
 import type { Task } from "@/lib/tasks";
 import {
-  applyPriceDrop,
   completeTakedown,
   confirmListingPriceUpdated,
   confirmListingRenewed,
@@ -10,6 +9,7 @@ import {
 } from "@/lib/actions";
 import { formatPrice } from "@/lib/format";
 import { OpenListingButton } from "@/components/OpenListingButton";
+import { DropTaskActions } from "@/components/DropTaskActions";
 
 function SnoozeButton({ itemId }: { itemId: number }) {
   return (
@@ -69,11 +69,11 @@ export function TaskSection({ tasks }: { tasks: Task[] }) {
                     <strong>{formatPrice(task.targetPrice)}</strong>
                   </span>
                   <span className="flex gap-1.5">
-                    <form action={applyPriceDrop.bind(null, task.itemId)}>
-                      <button className="rounded-md bg-purple-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-purple-700">
-                        ✓ Apply {formatPrice(task.targetPrice)}
-                      </button>
-                    </form>
+                    <DropTaskActions
+                      itemId={task.itemId}
+                      targetPrice={task.targetPrice}
+                      autoChannels={task.autoChannels}
+                    />
                     <SnoozeButton itemId={task.itemId} />
                   </span>
                 </TaskRow>
