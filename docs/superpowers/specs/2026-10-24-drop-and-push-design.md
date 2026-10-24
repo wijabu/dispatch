@@ -61,18 +61,18 @@ type DropPushResult = { newPrice: number | null; channels: ChannelOutcome[] };
 dropAndPushCore(db, itemId, mode, runners, now): Promise<DropPushResult>
 ```
 
-`runners` injects the emulator work (`repriceOfferup`, `relistOfferup`, `repriceFacebook`, `renewFacebook`), so tests run against an in-memory DB with fakes. The core never imports `@/db` or `automation-actions.ts`.
+`runners` injects the emulator work as four functions returning `AndroidResult`: `repriceOfferup`, `relistOfferup`, `repriceFacebook`, `renewFacebook` (the server action wires `renewFacebook` to `relistFacebook(ctx, {action: "renew"})`). Tests run against an in-memory DB with fakes. The core never imports `@/db` or `automation-actions.ts`.
 
 Steps:
 
-1. If `computeDropTarget(item)` is null, return `newPrice: null` with a single failed outcome. Nothing is written.
+1. If `computeDropTarget(item)` is null, return `{ newPrice: null, channels: [{ channel: "item", outcome: "failed", detail: "no price drop available" }] }`. Nothing is written and no runner is called.
 2. `applyPriceDropCore` **once**.
-3. For each active listing:
+3. For each active listing, OfferUp first, then Facebook, then manual channels:
 
 | Channel | `reprice` | `relist` |
 |---|---|---|
 | OfferUp | reprice → on done `syncListingPriceCore` → `repriced` | relist (delete-repost) → on done `markListingRelistedCore` → `relisted` |
-| Facebook | reprice → on done `syncListingPriceCore` → `repriced` | renew → on done `markListingRenewedCore`; then reprice → on done `syncListingPriceCore` → `relisted` |
+| Facebook | reprice → on done `syncListingPriceCore` → `repriced` | `facebookRenewThenReprice` (section 3) → `relisted` |
 | Craigslist / Reddit / Watchuseek | `manual` ("update by hand") | `manual` |
 
 - Facebook relist where the renew succeeds but the reprice fails: `renewedAt` is stamped, the price is **not** synced, outcome `failed` with detail `renewed; reprice failed: <step>: <reason>`. The stale-price task then flags the gap.
@@ -81,14 +81,15 @@ Steps:
 
 Server action `dropAndPush(itemId, mode)` in `automation-actions.ts`:
 
-- Acquires the Android lock **once** for the whole pass (the per-channel server actions each take the lock, so chaining them would fail with "another automation is running"). If the lock is busy, it returns before dropping the price.
-- Builds the real runners from the existing flows (`repriceOfferup`, `relistOfferup`, `repriceFacebook`, `relistFacebook({action: "renew"})`), calls the core, releases the lock, revalidates `/` and the item's publish page.
+- If the item has an active OfferUp/FB listing, acquires the Android lock **once** for the whole pass (the per-channel server actions each take the lock, so chaining them would fail with "another automation is running"). If the lock is busy, it returns `{ newPrice: null, channels: [{ channel: "emulator", outcome: "failed", detail: "another automation is running" }] }` **before** dropping the price.
+- If the item has no OfferUp/FB listing (the single **Drop to $X** button), it skips the lock entirely, so a manual-only drop never fails because the emulator is busy.
+- Builds the real runners from the existing flows, calls the core, releases the lock, revalidates `/` and the item's publish page.
 
 ### 3. Facebook relist fix (`relistOnFacebook`)
 
 - After a successful renew, stamp `renewedAt`. Then, **if** `listing.listedPrice !== item.askingPrice`, run `repriceFacebook` in the same lock and sync `listedPrice` only on a successful reprice.
 - If the prices already match, no reprice runs and nothing about the price is written.
-- The renew-then-reprice sequence is one shared helper used by both `relistOnFacebook` and the core's FB relist branch, so the two paths can't drift.
+- The sequence is one helper, `facebookRenewThenReprice(db, listingId, runners, now)`, exported from `drop-push-core.ts` and used by both `relistOnFacebook` and the core's FB relist branch, so the two paths can't drift. After a drop the prices normally differ, so the reprice runs; the equality check only skips it when the live price already matches.
 - This also fixes the publish card's per-channel **Relist + drop** on Facebook.
 
 ### 4. Automation log
@@ -98,7 +99,7 @@ New module `src/lib/automation-log.ts`:
 ```ts
 type AutomationLogEntry = {
   at: string;            // ISO timestamp
-  action: string;        // "reprice" | "relist" | "post" | "mark_sold" | "drop_push" ...
+  action: "post" | "reprice" | "relist" | "mark_sold" | "drop_reprice" | "drop_relist";
   itemId: number;
   itemName?: string;
   channel: string;
@@ -111,10 +112,27 @@ type AutomationLogEntry = {
 logAutomation(entry, file = data/automation-log.jsonl): Promise<void>
 ```
 
-- Appends one JSON line to `data/automation-log.jsonl` (already gitignored via `data/`) and prints the same entry as one readable line to stdout, which shows in the Dispatch Terminal window.
+- Appends one JSON line to `data/automation-log.jsonl` (already gitignored via `data/`) and prints the same entry as one readable line to stdout, which shows in the Dispatch Terminal window. Format: `[automation] <at> <action> <channel> #<itemId> "<itemName>" <outcome>[ <step>: <reason>][ (screenshot: <path>)]`.
 - Best-effort: a logging error never fails or masks the action.
-- Called once per channel result from: `postToOfferup`, `dropOfferupPrice`, `relistOnOfferup`, `postToFacebook`, `dropFacebookPrice`, `relistOnFacebook`, `markSoldAndTakedown`, `dropAndPush`. That includes early failures (lock busy, item not found, automation disabled), which were the likely cause of this morning's untraced Sync price failure.
+- Called once per channel result:
+
+| Server action | `action` |
+|---|---|
+| `postToOfferup`, `postToFacebook` | `post` |
+| `dropOfferupPrice`, `dropFacebookPrice` (Sync price) | `reprice` |
+| `relistOnOfferup`, `relistOnFacebook` (incl. via publish-card Relist + drop) | `relist` |
+| `markSoldAndTakedown` | `mark_sold` |
+| `dropAndPush` | `drop_reprice` / `drop_relist` |
+
+- Early failures (lock busy, item not found, automation disabled) are logged too. They were the likely cause of this morning's untraced Sync price failure.
 - **Screenshot linking:** `captureFailureScreenshot` returns the path it wrote (or `undefined`); `step()` records it on the tracker's failed entry; `resolveResult` carries it into the result. `AndroidResult`'s `failed` variant gains an optional `screenshot?: string`. Callers that don't care are unaffected.
+
+## Build order
+
+1. Automation log + screenshot linking (independent; everything after uses it).
+2. `facebookRenewThenReprice` + `relistOnFacebook` fix.
+3. `dropAndPushCore` + `dropAndPush` server action.
+4. `price_drop.autoChannels` + `DropTaskActions` UI; delete `applyPriceDrop`.
 
 ## Testing
 
@@ -136,6 +154,6 @@ Live emulator checks are left to Wil (they post real listings).
 
 ## Risks
 
-- **Long server action.** Relist on both channels can run 10+ minutes. Next server actions have no default timeout under `next start`, and the lock prevents overlap. If the page is closed mid-run, the action still finishes server-side and the log records the outcome.
+- **Long server action.** Relist on both channels can run 10+ minutes. Whether this Next version imposes a server-action timeout under `next start` is **not yet verified**; the plan's first task checks `node_modules/next/dist/docs/` (per `AGENTS.md`). The existing single-channel relist already runs ~7 minutes without hitting one. The lock prevents overlap. If the page is closed mid-run, the action should still finish server-side, and the log records the outcome either way.
 - **Drop-before-push seam** (same as Relist + drop today). The Dispatch price drops before the emulator work; any channel that fails shows as a stale-price task until retried.
 - **Log growth.** One line per action; at Dispatch's volume this stays small. No rotation for now.
