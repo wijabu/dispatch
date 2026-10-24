@@ -19,7 +19,13 @@ import { AUTOFILL_CHANNELS, STAGING } from "@/config/staging";
 import { OFFERUP_AUTOMATION_ENABLED } from "@/config/android";
 import { FACEBOOK_AUTOMATION_ENABLED } from "@/config/facebook";
 import { stagePhotosCore } from "@/lib/staging-core";
-import { facebookRenewThenReprice, type PushRunners } from "@/lib/drop-push-core";
+import {
+  dropAndPushCore,
+  facebookRenewThenReprice,
+  type DropPushResult,
+  type PushMode,
+  type PushRunners,
+} from "@/lib/drop-push-core";
 import { applyPriceDropCore, markListingRelistedCore, syncListingPriceCore, markSoldCore, endListingCore } from "@/lib/task-actions";
 import type { SoldChannel } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -438,6 +444,66 @@ export async function relistWithDrop(
   return publisherId === "offerup"
     ? relistOnOfferup(itemId, listingId)
     : relistOnFacebook(itemId, listingId);
+}
+
+async function logDropPush(action: AutomationAction, itemId: number, result: DropPushResult): Promise<void> {
+  const itemName = await itemNameFor(itemId);
+  for (const c of result.channels) {
+    const screenshot = c.result?.status === "failed" ? c.result.screenshot : undefined;
+    await logAutomation({
+      at: new Date().toISOString(),
+      action,
+      itemId,
+      itemName,
+      channel: c.channel,
+      outcome: c.outcome,
+      ...(c.detail ? { reason: c.detail } : {}),
+      ...(screenshot ? { screenshot } : {}),
+    });
+  }
+}
+
+// Homepage drop task: drop the price once, then reprice or relist every active
+// OfferUp/Facebook listing in one pass. Takes the Android lock once, and only
+// when an emulator channel is involved, so a manual-only drop never waits on
+// the emulator. Deliberately does NOT revalidate: the drop task would vanish
+// and take its result lines with it. The client calls refreshAfterDrop once the
+// user has read them.
+export async function dropAndPush(itemId: number, mode: PushMode): Promise<DropPushResult> {
+  const action: AutomationAction = mode === "reprice" ? "drop_reprice" : "drop_relist";
+  const item = await getItem(itemId);
+  const usesEmulator = !!item?.listings.some(
+    (l) => l.status === "active" && (l.publisher === "offerup" || l.publisher === "facebook")
+  );
+
+  if (usesEmulator && !acquireAndroidLock()) {
+    const busy: DropPushResult = {
+      newPrice: null,
+      channels: [{ channel: "emulator", outcome: "failed", detail: "another automation is running" }],
+    };
+    await logDropPush(action, itemId, busy);
+    return busy;
+  }
+  let result: DropPushResult;
+  try {
+    result = await dropAndPushCore(db, itemId, mode, buildRunners(), new Date());
+  } catch (err) {
+    result = {
+      newPrice: null,
+      channels: [{ channel: "item", outcome: "failed", detail: err instanceof Error ? err.message : "Unknown error" }],
+    };
+  } finally {
+    if (usesEmulator) releaseAndroidLock();
+  }
+  await logDropPush(action, itemId, result);
+  return result;
+}
+
+// Called when the user acknowledges a dropAndPush result.
+export async function refreshAfterDrop(itemId: number): Promise<void> {
+  revalidatePath("/");
+  revalidatePath(`/items/${itemId}`);
+  revalidatePath(`/items/${itemId}/publish`);
 }
 
 export type SoldResult = {
