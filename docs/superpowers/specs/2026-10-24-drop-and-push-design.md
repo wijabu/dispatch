@@ -44,6 +44,7 @@
 - While running, buttons are disabled and the row shows "Working… (emulator)". A relist across both channels can take several minutes.
 - On completion, one line per channel, same style as `MarkSoldForm`: `✓ OfferUp repriced`, `⚠️ Facebook failed: set price: <reason>`, `○ Craigslist: update by hand`.
 - **Snooze** stays.
+- **Keeping the result on screen.** Once the price drops, the `price_drop` task is no longer due, so any page refresh removes the row and its result lines with it. `dropAndPush` therefore calls **no** `revalidatePath`. The result lines stay until the user clicks **OK**, which calls a small server action `refreshAfterDrop(itemId)` that revalidates `/`, `/items/<id>` and `/items/<id>/publish`. That's when the row disappears and any stale-price tasks show up. The log records the result regardless.
 
 ### 2. Fan-out (`dropAndPushCore` + server action `dropAndPush`)
 
@@ -83,7 +84,7 @@ Server action `dropAndPush(itemId, mode)` in `automation-actions.ts`:
 
 - If the item has an active OfferUp/FB listing, acquires the Android lock **once** for the whole pass (the per-channel server actions each take the lock, so chaining them would fail with "another automation is running"). If the lock is busy, it returns `{ newPrice: null, channels: [{ channel: "emulator", outcome: "failed", detail: "another automation is running" }] }` **before** dropping the price.
 - If the item has no OfferUp/FB listing (the single **Drop to $X** button), it skips the lock entirely, so a manual-only drop never fails because the emulator is busy.
-- Builds the real runners from the existing flows, calls the core, releases the lock, revalidates `/` and the item's publish page.
+- Builds the real runners from the existing flows, calls the core, releases the lock, logs each channel. No revalidation (see section 1).
 
 ### 3. Facebook relist fix (`relistOnFacebook`)
 
@@ -154,6 +155,7 @@ Live emulator checks are left to Wil (they post real listings).
 
 ## Risks
 
-- **Long server action.** Relist on both channels can run 10+ minutes. Whether this Next version imposes a server-action timeout under `next start` is **not yet verified**; the plan's first task checks `node_modules/next/dist/docs/` (per `AGENTS.md`). The existing single-channel relist already runs ~7 minutes without hitting one. The lock prevents overlap. If the page is closed mid-run, the action should still finish server-side, and the log records the outcome either way.
+- **Long server action.** Relist on both channels can run 10+ minutes. Checked in the bundled Next docs: `maxDuration` is "set by deployment platform," and self-hosted `next start` sets none, so no timeout applies. The existing single-channel relist already runs ~7 minutes. The lock prevents overlap. If the page is closed mid-run, the action should still finish server-side, and the log records the outcome either way.
+- **FB renew selector is unverified.** `flows/facebook/relist.ts` notes the Renew menu item only appears on aging listings and its selector was never captured live. FB relist (old and new paths) may fail at the renew step until it is. The log will now show exactly where.
 - **Drop-before-push seam** (same as Relist + drop today). The Dispatch price drops before the emulator work; any channel that fails shows as a stale-price task until retried.
 - **Log growth.** One line per action; at Dispatch's volume this stays small. No rotation for now.
