@@ -19,11 +19,66 @@ import { AUTOFILL_CHANNELS, STAGING } from "@/config/staging";
 import { OFFERUP_AUTOMATION_ENABLED } from "@/config/android";
 import { FACEBOOK_AUTOMATION_ENABLED } from "@/config/facebook";
 import { stagePhotosCore } from "@/lib/staging-core";
-import { applyPriceDropCore, markListingRenewedCore, markListingRelistedCore, syncListingPriceCore, markSoldCore, endListingCore } from "@/lib/task-actions";
+import {
+  dropAndPushCore,
+  facebookRenewThenReprice,
+  type DropPushResult,
+  type PushMode,
+  type PushRunners,
+} from "@/lib/drop-push-core";
+import { applyPriceDropCore, markListingRelistedCore, syncListingPriceCore, markSoldCore, endListingCore } from "@/lib/task-actions";
 import type { SoldChannel } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { items } from "@/db/schema";
+import { logAutomation, resultFields, type AutomationAction } from "@/lib/automation-log";
 
 const run = promisify(execFile);
 const STAGING_ROOT = path.join(process.cwd(), "data", "staging");
+
+async function itemNameFor(itemId: number): Promise<string | undefined> {
+  try {
+    const [row] = await db.select({ name: items.name }).from(items).where(eq(items.id, itemId));
+    return row?.name;
+  } catch {
+    return undefined;
+  }
+}
+
+// Run an emulator action and record its result in the automation log (file +
+// Terminal). Logging never changes the returned result.
+async function withLog(
+  action: AutomationAction,
+  itemId: number,
+  channel: string,
+  fn: () => Promise<AndroidResult>
+): Promise<AndroidResult> {
+  let result: AndroidResult;
+  try {
+    result = await fn();
+  } catch (err) {
+    // A throw before the runner's own try (getItem, generate) still gets logged.
+    await logAutomation({
+      at: new Date().toISOString(),
+      action,
+      itemId,
+      itemName: await itemNameFor(itemId),
+      channel,
+      outcome: "failed",
+      step: "unknown",
+      reason: err instanceof Error ? err.message : "Unknown error",
+    });
+    throw err;
+  }
+  await logAutomation({
+    at: new Date().toISOString(),
+    action,
+    itemId,
+    itemName: await itemNameFor(itemId),
+    channel,
+    ...resultFields(result),
+  });
+  return result;
+}
 
 export async function openAndPrefill(
   itemId: number,
@@ -102,9 +157,55 @@ export async function openListingInDedicatedBrowser(url: string): Promise<void> 
   await run("open", ["-a", STAGING.dedicatedBrowser, url]);
 }
 
+// Real emulator runners for drop-push-core. Each re-reads the item (so it sees
+// a price that was just dropped), generates the channel listing and drives the
+// flow. They never take the Android lock; the calling action holds it.
+function buildRunners(): PushRunners {
+  const load = async (itemId: number, publisherId: "offerup" | "facebook") => {
+    const item = await getItem(itemId);
+    if (!item) return null;
+    const { photos, listings: _l, prices: _p, ...itemRow } = item;
+    return {
+      item: itemRow,
+      listing: getPublisher(publisherId)!.generate(itemRow, photos),
+      photoPaths: photos.map((p) => path.join(PHOTOS_DIR, p.path)),
+    };
+  };
+  const notFound: AndroidResult = { status: "failed", step: "load", reason: "Item not found" };
+  const disabled = (name: string): AndroidResult => ({
+    status: "failed", step: "config", reason: `${name} automation is disabled`,
+  });
+  return {
+    repriceOfferup: async (itemId) => {
+      if (!OFFERUP_AUTOMATION_ENABLED) return disabled("OfferUp");
+      const ctx = await load(itemId, "offerup");
+      if (!ctx) return notFound;
+      return repriceOfferup({ ...ctx, photoPaths: [], newPrice: ctx.item.askingPrice ?? undefined });
+    },
+    relistOfferup: async (itemId) => {
+      if (!OFFERUP_AUTOMATION_ENABLED) return disabled("OfferUp");
+      const ctx = await load(itemId, "offerup");
+      if (!ctx) return notFound;
+      return relistOfferup(ctx);
+    },
+    repriceFacebook: async (itemId) => {
+      if (!FACEBOOK_AUTOMATION_ENABLED) return disabled("Facebook");
+      const ctx = await load(itemId, "facebook");
+      if (!ctx) return notFound;
+      return repriceFacebook({ ...ctx, photoPaths: [], newPrice: ctx.item.askingPrice ?? undefined });
+    },
+    renewFacebook: async (itemId) => {
+      if (!FACEBOOK_AUTOMATION_ENABLED) return disabled("Facebook");
+      const ctx = await load(itemId, "facebook");
+      if (!ctx) return notFound;
+      return relistFacebook(ctx, { action: "renew" });
+    },
+  };
+}
+
 // Mirrors openAndPrefill's lock/load/generate/finally shape, but drives the
 // Android emulator (via postOfferup) instead of the Playwright browser.
-export async function postToOfferup(itemId: number): Promise<AndroidResult> {
+async function postToOfferupRun(itemId: number): Promise<AndroidResult> {
   if (!OFFERUP_AUTOMATION_ENABLED) {
     return { status: "failed", step: "config", reason: "OfferUp automation is disabled" };
   }
@@ -131,9 +232,13 @@ export async function postToOfferup(itemId: number): Promise<AndroidResult> {
   }
 }
 
+export async function postToOfferup(itemId: number): Promise<AndroidResult> {
+  return withLog("post", itemId, "offerup", () => postToOfferupRun(itemId));
+}
+
 // Pushes the item's current asking price (already dropped in Dispatch) out to
 // the live OfferUp listing, then reconciles the listing's recorded price.
-export async function dropOfferupPrice(
+async function dropOfferupPriceRun(
   itemId: number,
   listingId: number
 ): Promise<AndroidResult> {
@@ -178,11 +283,15 @@ export async function dropOfferupPrice(
   return result;
 }
 
+export async function dropOfferupPrice(itemId: number, listingId: number): Promise<AndroidResult> {
+  return withLog("reprice", itemId, "offerup", () => dropOfferupPriceRun(itemId, listingId));
+}
+
 // Relist an item on OfferUp: post a fresh copy (auto-submit) then archive the
 // old listing (hands-off, post-first/delete-last). On success stamps the
 // ledger's renewedAt so the engine's relist cadence resets. Only fires once the
 // item is at its floor (the engine suppresses relist tasks until asking <= min).
-export async function relistOnOfferup(
+async function relistOnOfferupRun(
   itemId: number,
   listingId: number
 ): Promise<AndroidResult> {
@@ -220,10 +329,14 @@ export async function relistOnOfferup(
   return result;
 }
 
+export async function relistOnOfferup(itemId: number, listingId: number): Promise<AndroidResult> {
+  return withLog("relist", itemId, "offerup", () => relistOnOfferupRun(itemId, listingId));
+}
+
 // ---- Facebook Marketplace (emulator FB app) — mirrors the OfferUp actions ----
 
 
-export async function postToFacebook(itemId: number): Promise<AndroidResult> {
+async function postToFacebookRun(itemId: number): Promise<AndroidResult> {
   if (!FACEBOOK_AUTOMATION_ENABLED) {
     return { status: "failed", step: "config", reason: "Facebook automation is disabled" };
   }
@@ -245,7 +358,11 @@ export async function postToFacebook(itemId: number): Promise<AndroidResult> {
   }
 }
 
-export async function dropFacebookPrice(
+export async function postToFacebook(itemId: number): Promise<AndroidResult> {
+  return withLog("post", itemId, "facebook", () => postToFacebookRun(itemId));
+}
+
+async function dropFacebookPriceRun(
   itemId: number,
   listingId: number
 ): Promise<AndroidResult> {
@@ -277,7 +394,11 @@ export async function dropFacebookPrice(
   return result;
 }
 
-export async function relistOnFacebook(
+export async function dropFacebookPrice(itemId: number, listingId: number): Promise<AndroidResult> {
+  return withLog("reprice", itemId, "facebook", () => dropFacebookPriceRun(itemId, listingId));
+}
+
+async function relistOnFacebookRun(
   itemId: number,
   listingId: number
 ): Promise<AndroidResult> {
@@ -287,27 +408,15 @@ export async function relistOnFacebook(
   const item = await getItem(itemId);
   if (!item) return { status: "failed", step: "load", reason: "Item not found" };
 
-  // Facebook policy is renew-only: native Renew keeps the listing fresh, and a
-  // fresh repost is impossible (FB blocks a duplicate main photo while the old
-  // listing is live). Always renew; never repost.
-  const action: "renew" | "relist" = "renew";
-
-  const { photos, listings: _l, prices: _p, ...itemRow } = item;
-  const listing = getPublisher("facebook")!.generate(itemRow, photos);
-  const photoPaths = photos.map((p) => path.join(PHOTOS_DIR, p.path));
-
   if (!acquireAndroidLock()) {
     return { status: "failed", step: "lock", reason: "another automation is running" };
   }
   let result: AndroidResult;
   try {
-    result = await relistFacebook({ listing, item: itemRow, photoPaths }, { action });
-    if (result.status === "done") {
-      // FB renew keeps the same post (so listedAt stays), but a drop may have
-      // changed the price — sync the stored listed price.
-      await markListingRenewedCore(db, listingId, new Date());
-      await syncListingPriceCore(db, listingId);
-    }
+    // Facebook policy is renew-only, and renew leaves the price alone. Renew,
+    // then reprice if a drop left the live price behind; listedPrice syncs only
+    // when that reprice succeeds.
+    result = await facebookRenewThenReprice(db, itemId, listingId, buildRunners(), new Date());
   } catch (err) {
     result = { status: "failed", step: "unknown", reason: err instanceof Error ? err.message : "Unknown error" };
   } finally {
@@ -316,6 +425,10 @@ export async function relistOnFacebook(
   revalidatePath("/");
   revalidatePath(`/items/${itemId}/publish`);
   return result;
+}
+
+export async function relistOnFacebook(itemId: number, listingId: number): Promise<AndroidResult> {
+  return withLog("relist", itemId, "facebook", () => relistOnFacebookRun(itemId, listingId));
 }
 
 // Drop the item's price one step (floored at its minimum via applyPriceDropCore),
@@ -349,10 +462,74 @@ export async function relistWithDrop(
     : relistOnFacebook(itemId, listingId);
 }
 
+async function logDropPush(action: AutomationAction, itemId: number, result: DropPushResult): Promise<void> {
+  const itemName = await itemNameFor(itemId);
+  for (const c of result.channels) {
+    const screenshot = c.result?.status === "failed" ? c.result.screenshot : undefined;
+    await logAutomation({
+      at: new Date().toISOString(),
+      action,
+      itemId,
+      itemName,
+      channel: c.channel,
+      outcome: c.outcome,
+      ...(c.detail ? { reason: c.detail } : {}),
+      ...(screenshot ? { screenshot } : {}),
+    });
+  }
+}
+
+// Homepage drop task: drop the price once, then reprice or relist every active
+// OfferUp/Facebook listing in one pass. Takes the Android lock once, and only
+// when an emulator channel is involved, so a manual-only drop never waits on
+// the emulator. Deliberately does NOT revalidate: the drop task would vanish
+// and take its result lines with it. The client calls refreshAfterDrop once the
+// user has read them.
+export async function dropAndPush(itemId: number, mode: PushMode): Promise<DropPushResult> {
+  // Server actions are callable endpoints; don't let a bad value mean "relist".
+  if (mode !== "reprice" && mode !== "relist") {
+    return { newPrice: null, channels: [{ channel: "item", outcome: "failed", detail: "invalid mode" }] };
+  }
+  const action: AutomationAction = mode === "reprice" ? "drop_reprice" : "drop_relist";
+  const item = await getItem(itemId);
+  const usesEmulator = !!item?.listings.some(
+    (l) => l.status === "active" && (l.publisher === "offerup" || l.publisher === "facebook")
+  );
+
+  if (usesEmulator && !acquireAndroidLock()) {
+    const busy: DropPushResult = {
+      newPrice: null,
+      channels: [{ channel: "emulator", outcome: "failed", detail: "another automation is running" }],
+    };
+    await logDropPush(action, itemId, busy);
+    return busy;
+  }
+  let result: DropPushResult;
+  try {
+    result = await dropAndPushCore(db, itemId, mode, buildRunners(), new Date());
+  } catch (err) {
+    result = {
+      newPrice: null,
+      channels: [{ channel: "item", outcome: "failed", detail: err instanceof Error ? err.message : "Unknown error" }],
+    };
+  } finally {
+    if (usesEmulator) releaseAndroidLock();
+  }
+  await logDropPush(action, itemId, result);
+  return result;
+}
+
+// Called when the user acknowledges a dropAndPush result.
+export async function refreshAfterDrop(itemId: number): Promise<void> {
+  revalidatePath("/");
+  revalidatePath(`/items/${itemId}`);
+  revalidatePath(`/items/${itemId}/publish`);
+}
+
 export type SoldResult = {
   soldPrice: number | null;
   soldChannel: SoldChannel | null;
-  channels: { channel: string; outcome: "ended" | "failed" | "manual" | "skipped"; detail?: string }[];
+  channels: { channel: string; outcome: "ended" | "failed" | "manual" | "skipped"; detail?: string; screenshot?: string }[];
 };
 
 // One-click sale reconciliation. Records the sale, then takes the item down on
@@ -367,6 +544,10 @@ export async function markSoldAndTakedown(
 ): Promise<SoldResult> {
   const item = await getItem(itemId);
   if (!item) {
+    await logAutomation({
+      at: new Date().toISOString(), action: "mark_sold", itemId, channel: "item",
+      outcome: "failed", reason: "Item not found",
+    });
     return { soldPrice, soldChannel, channels: [{ channel: "item", outcome: "failed", detail: "Item not found" }] };
   }
   const { photos, listings: itemListings, prices: _p, ...itemRow } = item;
@@ -412,7 +593,8 @@ export async function markSoldAndTakedown(
           channels.push({ channel: l.publisher, outcome: "ended" });
         } else {
           const detail = result.status === "failed" ? `${result.step}: ${result.reason}` : result.status;
-          channels.push({ channel: l.publisher, outcome: "failed", detail });
+          const screenshot = result.status === "failed" ? result.screenshot : undefined;
+          channels.push({ channel: l.publisher, outcome: "failed", detail, ...(screenshot ? { screenshot } : {}) });
         }
         continue;
       }
@@ -421,6 +603,19 @@ export async function markSoldAndTakedown(
     }
   } finally {
     if (androidLocked) releaseAndroidLock();
+  }
+
+  for (const c of channels) {
+    await logAutomation({
+      at: new Date().toISOString(),
+      action: "mark_sold",
+      itemId,
+      itemName: itemRow.name,
+      channel: c.channel,
+      outcome: c.outcome,
+      ...(c.detail ? { reason: c.detail } : {}),
+      ...(c.screenshot ? { screenshot: c.screenshot } : {}),
+    });
   }
 
   revalidatePath("/");

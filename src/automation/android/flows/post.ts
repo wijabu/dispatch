@@ -69,7 +69,8 @@ async function fillField(adb: Adb, testId: string, value: string): Promise<void>
   await adb.typeText(value);
 }
 
-export async function captureFailureScreenshot(adb: Adb, step: string): Promise<void> {
+// Returns the path written, or undefined if the capture failed.
+export async function captureFailureScreenshot(adb: Adb, step: string): Promise<string | undefined> {
   try {
     await fs.promises.mkdir(ANDROID.debugDir, { recursive: true });
     const dest = path.join(
@@ -77,8 +78,10 @@ export async function captureFailureScreenshot(adb: Adb, step: string): Promise<
       `post-${step.replace(/\s+/g, "-")}-${Date.now()}.png`
     );
     await adb.screencap(dest);
+    return dest;
   } catch {
     // Best-effort debug artifact; a failed capture must never mask the real failure.
+    return undefined;
   }
 }
 
@@ -86,7 +89,8 @@ export async function captureFailureScreenshot(adb: Adb, step: string): Promise<
 // the caller bails out via resolveResult. Every step in this flow stops the
 // whole run on failure — once the on-device UI state is unknown, blindly
 // continuing to tap through the rest of the form risks fat-fingering the wrong
-// control, so we degrade to resolveResult(t) instead.
+// control, so we degrade to resolveResult(t) instead. The screenshot path rides
+// on the failure so the automation log can point at it.
 export async function step(
   adb: Adb,
   t: StepTracker,
@@ -94,7 +98,10 @@ export async function step(
   fn: () => Promise<void>
 ): Promise<boolean> {
   const ok = await tryStep(t, name, fn);
-  if (!ok) await captureFailureScreenshot(adb, name);
+  if (!ok) {
+    const shot = await captureFailureScreenshot(adb, name);
+    if (shot) t.failed[t.failed.length - 1].screenshot = shot;
+  }
   return ok;
 }
 

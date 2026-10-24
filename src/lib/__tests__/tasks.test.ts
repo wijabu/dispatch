@@ -92,7 +92,7 @@ describe("computeTasks — price_drop", () => {
       inputs({ items: [item], lastPriceChange: new Map([[1, "2026-07-01 12:00:00"]]) })
     );
     expect(tasks).toEqual([
-      { type: "price_drop", itemId: 1, itemName: item.name, currentPrice: 6800, targetPrice: 6596 },
+      { type: "price_drop", itemId: 1, itemName: item.name, currentPrice: 6800, targetPrice: 6596, autoChannels: [] },
     ]);
   });
 
@@ -110,8 +110,38 @@ describe("computeTasks — price_drop", () => {
       inputs({ items: [item], lastPriceChange: new Map([[1, "2026-07-03 12:00:00"]]) })
     );
     expect(tasks).toEqual([
-      { type: "price_drop", itemId: 1, itemName: item.name, currentPrice: 6800, targetPrice: 6596 },
+      { type: "price_drop", itemId: 1, itemName: item.name, currentPrice: 6800, targetPrice: 6596, autoChannels: [] },
     ]);
+  });
+
+  it("lists the item's active OfferUp/Facebook channels, OfferUp first", () => {
+    const item = makeItem(cadence);
+    const tasks = computeTasks(
+      inputs({
+        items: [item],
+        activeListings: [
+          makeListing({ id: 1, publisher: "facebook" }),
+          makeListing({ id: 2, publisher: "craigslist" }),
+          makeListing({ id: 3, publisher: "offerup" }),
+        ],
+        lastPriceChange: new Map([[1, "2026-07-01 12:00:00"]]),
+      })
+    );
+    expect(tasks.find((t) => t.type === "price_drop")).toMatchObject({
+      autoChannels: ["offerup", "facebook"],
+    });
+  });
+
+  it("leaves autoChannels empty for manual-only items", () => {
+    const item = makeItem(cadence);
+    const tasks = computeTasks(
+      inputs({
+        items: [item],
+        activeListings: [makeListing({ id: 2, publisher: "craigslist" })],
+        lastPriceChange: new Map([[1, "2026-07-01 12:00:00"]]),
+      })
+    );
+    expect(tasks.find((t) => t.type === "price_drop")).toMatchObject({ autoChannels: [] });
   });
 
   it("falls back to createdAt when no price history exists", () => {
@@ -401,7 +431,7 @@ describe("computeTasks — ready_to_publish", () => {
       inputs({ items: [item], lastPriceChange: new Map([[3, "2026-07-01 12:00:00"]]) })
     );
     expect(tasks).toEqual([
-      { type: "price_drop", itemId: 3, itemName: item.name, currentPrice: 6800, targetPrice: 6596 },
+      { type: "price_drop", itemId: 3, itemName: item.name, currentPrice: 6800, targetPrice: 6596, autoChannels: [] },
     ]);
   });
 });
