@@ -35,11 +35,13 @@ export function TaskSection({ tasks }: { tasks: Task[] }) {
     <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
       <h2 className="mb-3 font-semibold">⚡ Today&apos;s Tasks ({tasks.length})</h2>
       <div className="space-y-2">
-        {tasks.map((task, i) => {
+        {tasks.map((task) => {
+          // Stable key so a refresh never hands one task's client state to another.
+          const key = `${task.type}-${task.itemId}-${"listingId" in task ? task.listingId : ""}`;
           switch (task.type) {
             case "manual_takedown":
               return (
-                <TaskRow key={i}>
+                <TaskRow key={key}>
                   <span className="text-sm">
                     📕 <strong>Take down on {task.publisherName}:</strong>{" "}
                     <Link href={`/items/${task.itemId}`} className="underline">
@@ -59,7 +61,7 @@ export function TaskSection({ tasks }: { tasks: Task[] }) {
               );
             case "price_drop":
               return (
-                <TaskRow key={i}>
+                <TaskRow key={key}>
                   <span className="text-sm">
                     💰 <strong>Drop price:</strong>{" "}
                     <Link href={`/items/${task.itemId}`} className="underline">
@@ -74,13 +76,12 @@ export function TaskSection({ tasks }: { tasks: Task[] }) {
                       targetPrice={task.targetPrice}
                       autoChannels={task.autoChannels}
                     />
-                    <SnoozeButton itemId={task.itemId} />
                   </span>
                 </TaskRow>
               );
             case "stale_price":
               return (
-                <TaskRow key={i}>
+                <TaskRow key={key}>
                   <span className="text-sm">
                     ⚠️ <strong>Stale price on {task.publisherName}:</strong>{" "}
                     <Link href={`/items/${task.itemId}`} className="underline">
@@ -106,7 +107,7 @@ export function TaskSection({ tasks }: { tasks: Task[] }) {
               );
             case "relist":
               return (
-                <TaskRow key={i}>
+                <TaskRow key={key}>
                   <span className="text-sm">
                     🔄 <strong>{task.action === "renew" ? "Renew" : "Relist"} on {task.publisherName}:</strong>{" "}
                     <Link href={`/items/${task.itemId}`} className="underline">
@@ -139,7 +140,7 @@ export function TaskSection({ tasks }: { tasks: Task[] }) {
               );
             case "ready_to_publish":
               return (
-                <TaskRow key={i}>
+                <TaskRow key={key}>
                   <span className="text-sm">
                     📤 <strong>Ready to publish:</strong>{" "}
                     <Link href={`/items/${task.itemId}`} className="underline">

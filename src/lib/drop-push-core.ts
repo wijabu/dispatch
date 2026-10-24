@@ -67,8 +67,8 @@ export async function facebookRenewThenReprice(
   const screenshot = reprice.status === "failed" ? reprice.screenshot : undefined;
   return {
     status: "failed",
-    step: "reprice",
-    reason: `renewed; reprice failed: ${describeFailure(reprice)}`,
+    step: "renewed; reprice failed", // describeFailure renders "<step>: <reason>"
+    reason: describeFailure(reprice),
     ...(screenshot ? { screenshot } : {}),
   };
 }

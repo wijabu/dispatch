@@ -93,8 +93,8 @@ describe("facebookRenewThenReprice", () => {
       NOW
     );
     expect(res).toEqual({
-      status: "failed", step: "reprice",
-      reason: "renewed; reprice failed: set price: no node", screenshot: "/d/p.png",
+      status: "failed", step: "renewed; reprice failed",
+      reason: "set price: no node", screenshot: "/d/p.png",
     });
     const row = await getListing(l.id);
     expect(row.renewedAt).toBe("2026-07-10 12:00:00");
@@ -194,6 +194,19 @@ describe("dropAndPushCore", () => {
     expect(fbRow.listedAt).toBe("2026-07-01 00:00:00");
     expect(fbRow.renewedAt).toBe("2026-07-10 12:00:00");
     expect(fbRow.listedPrice).toBe(6596);
+  });
+
+  it("relist mode reports a Facebook reprice failure after a good renew", async () => {
+    await insertListing("facebook", 6800);
+    const { runners } = fakeRunners({
+      repriceFacebook: async () => ({ status: "failed", step: "set price", reason: "no node" }),
+    });
+    const res = await dropAndPushCore(db, itemId, "relist", runners, NOW);
+    expect(res.channels[0]).toMatchObject({
+      channel: "facebook",
+      outcome: "failed",
+      detail: "renewed; reprice failed: set price: no node",
+    });
   });
 
   it("marks manual channels without running anything", async () => {

@@ -50,9 +50,25 @@ async function withLog(
   action: AutomationAction,
   itemId: number,
   channel: string,
-  run: () => Promise<AndroidResult>
+  fn: () => Promise<AndroidResult>
 ): Promise<AndroidResult> {
-  const result = await run();
+  let result: AndroidResult;
+  try {
+    result = await fn();
+  } catch (err) {
+    // A throw before the runner's own try (getItem, generate) still gets logged.
+    await logAutomation({
+      at: new Date().toISOString(),
+      action,
+      itemId,
+      itemName: await itemNameFor(itemId),
+      channel,
+      outcome: "failed",
+      step: "unknown",
+      reason: err instanceof Error ? err.message : "Unknown error",
+    });
+    throw err;
+  }
   await logAutomation({
     at: new Date().toISOString(),
     action,
@@ -470,6 +486,10 @@ async function logDropPush(action: AutomationAction, itemId: number, result: Dro
 // and take its result lines with it. The client calls refreshAfterDrop once the
 // user has read them.
 export async function dropAndPush(itemId: number, mode: PushMode): Promise<DropPushResult> {
+  // Server actions are callable endpoints; don't let a bad value mean "relist".
+  if (mode !== "reprice" && mode !== "relist") {
+    return { newPrice: null, channels: [{ channel: "item", outcome: "failed", detail: "invalid mode" }] };
+  }
   const action: AutomationAction = mode === "reprice" ? "drop_reprice" : "drop_relist";
   const item = await getItem(itemId);
   const usesEmulator = !!item?.listings.some(
