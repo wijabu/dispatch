@@ -25,8 +25,12 @@ export function computeDropTarget(item: Item): number | null {
   return target < item.askingPrice ? target : null;
 }
 
+// Channels whose live price Dispatch can push on the emulator, in push order.
+const AUTO_CHANNELS = ["offerup", "facebook"] as const;
+export type AutoChannel = (typeof AUTO_CHANNELS)[number];
+
 export type Task =
-  | { type: "price_drop"; itemId: number; itemName: string; currentPrice: number; targetPrice: number }
+  | { type: "price_drop"; itemId: number; itemName: string; currentPrice: number; targetPrice: number; autoChannels: AutoChannel[] }
   | { type: "relist"; itemId: number; itemName: string; listingId: number; publisherId: string; publisherName: string; listingUrl: string | null; action: "renew" | "relist"; ageDays: number }
   | { type: "stale_price"; itemId: number; itemName: string; listingId: number; publisherId: string; publisherName: string; listingUrl: string | null; listedPrice: number | null; askingPrice: number }
   | { type: "manual_takedown"; itemId: number; itemName: string; listingId: number; publisherId: string; publisherName: string; listingUrl: string | null }
@@ -58,6 +62,13 @@ export function computeTasks(inputs: TaskInputs): Task[] {
   for (const l of inputs.activeListings) {
     activeByItem.set(l.itemId, (activeByItem.get(l.itemId) ?? 0) + 1);
   }
+  const autoByItem = new Map<number, Set<string>>();
+  for (const l of inputs.activeListings) {
+    if (!(AUTO_CHANNELS as readonly string[]).includes(l.publisher)) continue;
+    const set = autoByItem.get(l.itemId) ?? new Set<string>();
+    set.add(l.publisher);
+    autoByItem.set(l.itemId, set);
+  }
 
   for (const item of items) {
     if (isSnoozed(item, now)) continue;
@@ -77,6 +88,7 @@ export function computeTasks(inputs: TaskInputs): Task[] {
           drops.push({
             type: "price_drop", itemId: item.id, itemName: item.name,
             currentPrice: item.askingPrice, targetPrice: target,
+            autoChannels: AUTO_CHANNELS.filter((c) => autoByItem.get(item.id)?.has(c)),
           });
           emittedDrop = true;
         }
