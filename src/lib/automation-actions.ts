@@ -19,7 +19,8 @@ import { AUTOFILL_CHANNELS, STAGING } from "@/config/staging";
 import { OFFERUP_AUTOMATION_ENABLED } from "@/config/android";
 import { FACEBOOK_AUTOMATION_ENABLED } from "@/config/facebook";
 import { stagePhotosCore } from "@/lib/staging-core";
-import { applyPriceDropCore, markListingRenewedCore, markListingRelistedCore, syncListingPriceCore, markSoldCore, endListingCore } from "@/lib/task-actions";
+import { facebookRenewThenReprice, type PushRunners } from "@/lib/drop-push-core";
+import { applyPriceDropCore, markListingRelistedCore, syncListingPriceCore, markSoldCore, endListingCore } from "@/lib/task-actions";
 import type { SoldChannel } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { items } from "@/db/schema";
@@ -132,6 +133,52 @@ export async function stageForFacebook(
 export async function openListingInDedicatedBrowser(url: string): Promise<void> {
   if (!/^https:\/\//.test(url)) throw new Error("Invalid listing URL");
   await run("open", ["-a", STAGING.dedicatedBrowser, url]);
+}
+
+// Real emulator runners for drop-push-core. Each re-reads the item (so it sees
+// a price that was just dropped), generates the channel listing and drives the
+// flow. They never take the Android lock; the calling action holds it.
+function buildRunners(): PushRunners {
+  const load = async (itemId: number, publisherId: "offerup" | "facebook") => {
+    const item = await getItem(itemId);
+    if (!item) return null;
+    const { photos, listings: _l, prices: _p, ...itemRow } = item;
+    return {
+      item: itemRow,
+      listing: getPublisher(publisherId)!.generate(itemRow, photos),
+      photoPaths: photos.map((p) => path.join(PHOTOS_DIR, p.path)),
+    };
+  };
+  const notFound: AndroidResult = { status: "failed", step: "load", reason: "Item not found" };
+  const disabled = (name: string): AndroidResult => ({
+    status: "failed", step: "config", reason: `${name} automation is disabled`,
+  });
+  return {
+    repriceOfferup: async (itemId) => {
+      if (!OFFERUP_AUTOMATION_ENABLED) return disabled("OfferUp");
+      const ctx = await load(itemId, "offerup");
+      if (!ctx) return notFound;
+      return repriceOfferup({ ...ctx, photoPaths: [], newPrice: ctx.item.askingPrice ?? undefined });
+    },
+    relistOfferup: async (itemId) => {
+      if (!OFFERUP_AUTOMATION_ENABLED) return disabled("OfferUp");
+      const ctx = await load(itemId, "offerup");
+      if (!ctx) return notFound;
+      return relistOfferup(ctx);
+    },
+    repriceFacebook: async (itemId) => {
+      if (!FACEBOOK_AUTOMATION_ENABLED) return disabled("Facebook");
+      const ctx = await load(itemId, "facebook");
+      if (!ctx) return notFound;
+      return repriceFacebook({ ...ctx, photoPaths: [], newPrice: ctx.item.askingPrice ?? undefined });
+    },
+    renewFacebook: async (itemId) => {
+      if (!FACEBOOK_AUTOMATION_ENABLED) return disabled("Facebook");
+      const ctx = await load(itemId, "facebook");
+      if (!ctx) return notFound;
+      return relistFacebook(ctx, { action: "renew" });
+    },
+  };
 }
 
 // Mirrors openAndPrefill's lock/load/generate/finally shape, but drives the
@@ -339,27 +386,15 @@ async function relistOnFacebookRun(
   const item = await getItem(itemId);
   if (!item) return { status: "failed", step: "load", reason: "Item not found" };
 
-  // Facebook policy is renew-only: native Renew keeps the listing fresh, and a
-  // fresh repost is impossible (FB blocks a duplicate main photo while the old
-  // listing is live). Always renew; never repost.
-  const action: "renew" | "relist" = "renew";
-
-  const { photos, listings: _l, prices: _p, ...itemRow } = item;
-  const listing = getPublisher("facebook")!.generate(itemRow, photos);
-  const photoPaths = photos.map((p) => path.join(PHOTOS_DIR, p.path));
-
   if (!acquireAndroidLock()) {
     return { status: "failed", step: "lock", reason: "another automation is running" };
   }
   let result: AndroidResult;
   try {
-    result = await relistFacebook({ listing, item: itemRow, photoPaths }, { action });
-    if (result.status === "done") {
-      // FB renew keeps the same post (so listedAt stays), but a drop may have
-      // changed the price — sync the stored listed price.
-      await markListingRenewedCore(db, listingId, new Date());
-      await syncListingPriceCore(db, listingId);
-    }
+    // Facebook policy is renew-only, and renew leaves the price alone. Renew,
+    // then reprice if a drop left the live price behind; listedPrice syncs only
+    // when that reprice succeeds.
+    result = await facebookRenewThenReprice(db, itemId, listingId, buildRunners(), new Date());
   } catch (err) {
     result = { status: "failed", step: "unknown", reason: err instanceof Error ? err.message : "Unknown error" };
   } finally {
